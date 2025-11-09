@@ -5,7 +5,7 @@ import AutoImport from 'unplugin-auto-import/vite'
 
 const base = process.env.BASE_PATH || '/'
 const isPreview = process.env.IS_PREVIEW  ? true : false;
-// https://vite.dev/config/
+// https://vitejs.dev/config/
 export default defineConfig({
   define: {
    __BASE_PATH__: JSON.stringify(base),
@@ -68,15 +68,11 @@ export default defineConfig({
   base,
   build: {
     sourcemap: true,
-    outDir: 'out',
+    outDir: 'dist', // 🚀 Vercel 배포 오류 해결: 'out' -> 'dist'로 수정
   },
   resolve: {
     alias: {
-      '@': resolve(__dirname, './src')
-    }
+      '@': resolve(__dirname, './src'),
+    },
   },
-  server: {
-    port: 3000,
-    host: '0.0.0.0',
-  }
 })

@@ -171,14 +171,22 @@ export default function AdminPage() {
               )}
             </button>
 
-            <div className="text-center">
+            <div className="text-center space-y-2">
               <button
                 type="button"
                 onClick={handleForgotPassword}
-                className="text-teal-600 hover:text-teal-700 text-sm font-medium"
+                className="text-teal-600 hover:text-teal-700 text-sm font-medium block w-full"
                 disabled={loading}
               >
                 <i className="ri-question-line mr-1"></i>비밀번호를 잊으셨나요?
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/admin/signup')}
+                className="text-gray-600 hover:text-gray-900 text-sm font-medium block w-full"
+                disabled={loading}
+              >
+                <i className="ri-user-add-line mr-1"></i>처음이신가요? 회원가입
               </button>
             </div>
           </form>

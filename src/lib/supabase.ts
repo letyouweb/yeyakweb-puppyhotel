@@ -68,15 +68,17 @@ export interface AdminProfile {
   updated_at?: string;
 }
 
-export interface FAQ {
+export type FAQ = {
   id?: string;
+  site_id?: string | null;
   question: string;
   answer: string;
-  display_order: number;
-  is_active: boolean;
+  tags?: string[];
+  is_active?: boolean;
+  sort_order?: number;
   created_at?: string;
   updated_at?: string;
-}
+};
 
 interface AdminProfileInput {
   id?: string;
@@ -353,34 +355,50 @@ export const settingsService = {
   }
 };
 
+const SOLAPI_API_KEY = import.meta.env.VITE_SOLAPI_API_KEY;
+const SMS_SENDER = import.meta.env.VITE_SMS_SENDER;
+
+async function sendSMS(to: string, message: string) {
+  if (!SOLAPI_API_KEY || !SMS_SENDER) {
+    console.warn('SOLAPI API key 또는 SMS 발신 번호가 설정되지 않았습니다.');
+    return;
+  }
+
+  const response = await fetch('https://api.solapi.com/messages/v4/send', {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${SOLAPI_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      message: {
+        to,
+        from: SMS_SENDER,
+        text: message,
+      },
+    }),
+  });
+
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(`SOLAPI error: ${JSON.stringify(result)}`);
+  }
+  return result;
+}
+
 export const smsService = {
   async sendConfirmation(reservation: Reservation) {
-    const message = `[PuppyHotel] ${reservation.owner_name}님 ${reservation.pet_name}님 ${
-      reservation.service === 'grooming' ? '미용' : 
-      reservation.service === 'hotel' ? '호텔' : '데이케어'
-    } 예약이 확정되었습니다. 날짜: ${reservation.reservation_date} ${reservation.reservation_time || ''}. 문의: 02-1234-5678`;
-    
+    const message = `[PuppyHotel] ${reservation.owner_name}님의 ${reservation.pet_name} ${
+      reservation.service === 'grooming' ? '미용' : reservation.service === 'hotel' ? '호텔' : '데이케어'
+    } 예약이 확정되었습니다. 일시: ${reservation.reservation_date} ${reservation.reservation_time || ''}.`;
+
     try {
-      const response = await fetch(`${supabaseUrl}/functions/v1/send-sms`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseAnonKey}`
-        },
-        body: JSON.stringify({
-          to: reservation.phone,
-          message,
-          reservationId: reservation.id
-        })
-      });
-      
-      const result = await response.json();
-      return result;
+      return await sendSMS(reservation.phone, message);
     } catch (error) {
       console.error('SMS 발송 실패:', error);
       throw error;
     }
-  }
+  },
 };
 
 export const chatbotService = {
@@ -435,91 +453,100 @@ export const chatbotService = {
 };
 
 export const faqService = {
-  async getAll() {
-    const { data, error } = await supabase
+  async list(siteId?: string) {
+    let query = supabase
       .from('faqs')
       .select('*')
-      .eq('is_active', true)
-      .order('display_order', { ascending: true });
+      .order('sort_order', { ascending: true });
+    if (siteId) {
+      query = query.eq('site_id', siteId);
+    }
+    const { data, error } = await query;
     if (error) throw error;
-    return data as FAQ[];
+    return (data ?? []) as FAQ[];
   },
-
-  async create(faq: Omit<FAQ, 'id' | 'created_at' | 'updated_at'>) {
+  async create(row: FAQ) {
     const { data, error } = await supabase
       .from('faqs')
-      .insert(faq)
+      .insert(row)
       .select()
       .single();
     if (error) throw error;
     return data as FAQ;
   },
-
-  async update(id: string, updates: Partial<FAQ>) {
+  async update(id: string, patch: Partial<FAQ>) {
     const { data, error } = await supabase
       .from('faqs')
-      .update(updates)
+      .update(patch)
       .eq('id', id)
       .select()
       .single();
     if (error) throw error;
     return data as FAQ;
   },
-
-  async delete(id: string) {
+  async remove(id: string) {
     const { error } = await supabase
       .from('faqs')
       .delete()
       .eq('id', id);
     if (error) throw error;
   },
-
+  // Legacy helpers for existing UI
+  async getAll(siteId?: string) {
+    return this.list(siteId);
+  },
+  async delete(id: string) {
+    return this.remove(id);
+  },
   async deleteAll() {
-    const { error } = await supabase
-      .from('faqs')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // 모든 레코드 삭제
+    const { error } = await supabase.from('faqs').delete().not('id', 'is', null);
     if (error) throw error;
   },
-
-  async loadDefaultFaqs() {
-    const defaultFaqs: Omit<FAQ, 'id' | 'created_at' | 'updated_at'>[] = [
+  async loadDefaultFaqs(siteId?: string | null) {
+    const defaults: Array<Omit<FAQ, 'id' | 'created_at' | 'updated_at'>> = [
       {
+        site_id: siteId ?? null,
         question: '영업시간이 어떻게 되나요?',
-        answer: '매일 오전 9시부터 오후 8시까지 운영하며, 연중무휴입니다. 예약 상담은 전화나 카카오톡으로 24시간 가능합니다.',
-        display_order: 1,
-        is_active: true
+        answer: '매일 오전 9시부터 오후 8시까지 운영하며 연중무휴입니다.',
+        tags: ['운영시간', '안내'],
+        is_active: true,
+        sort_order: 1
       },
       {
+        site_id: siteId ?? null,
         question: '예약은 어떻게 하나요?',
-        answer: '홈페이지에서 온라인 예약이 가능하며, 전화(02-1234-5678) 또는 카카오톡(@puppyhotel)으로도 예약하실 수 있습니다.',
-        display_order: 2,
-        is_active: true
+        answer: '웹사이트, 02-1234-5678, 카카오톡(@puppyhotel)을 통해 예약 가능합니다.',
+        tags: ['예약'],
+        is_active: true,
+        sort_order: 2
       },
       {
-        question: '가격이 얼마예요?',
-        answer: '서비스별로 상이합니다. 호텔: 1박 5만원~, 미용: 소형견 4만원~, 데이케어: 1일 3만원~입니다. 자세한 가격은 전화 상담 부탁드립니다.',
-        display_order: 3,
-        is_active: true
+        site_id: siteId ?? null,
+        question: '이용 요금은 얼마인가요?',
+        answer: '호텔 1박 5만원~, 미용 4만원~, 데이케어 3만원~으로 서비스에 따라 변동됩니다.',
+        tags: ['가격'],
+        is_active: true,
+        sort_order: 3
       },
       {
-        question: '주차는 가능한가요?',
-        answer: '네, 무료 주차 공간이 마련되어 있습니다. 최대 10대까지 주차 가능합니다.',
-        display_order: 4,
-        is_active: true
+        site_id: siteId ?? null,
+        question: '주차가 가능한가요?',
+        answer: '매장 앞 전용 주차공간을 무료로 이용하실 수 있습니다.',
+        tags: ['주차'],
+        is_active: true,
+        sort_order: 4
       },
       {
-        question: '체크인/체크아웃 시간은?',
-        answer: '호텔 체크인은 오후 2시, 체크아웃은 오전 11시입니다. 시간 조정이 필요하시면 미리 말씀해주세요.',
-        display_order: 5,
-        is_active: true
+        site_id: siteId ?? null,
+        question: '체크인/체크아웃 시간은 어떻게 되나요?',
+        answer: '체크인은 오후 2시, 체크아웃은 오전 11시이며 사전 요청 시 조정 가능합니다.',
+        tags: ['체크인', '체크아웃'],
+        is_active: true,
+        sort_order: 5
       }
     ];
 
-    const { data, error } = await supabase
-      .from('faqs')
-      .insert(defaultFaqs)
-      .select();
+    const { data, error } = await supabase.from('faqs').insert(defaults).select();
     if (error) throw error;
     return data as FAQ[];
   }

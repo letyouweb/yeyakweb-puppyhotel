@@ -1,9 +1,10 @@
 
-import { RouteObject } from 'react-router-dom';
+import type { RouteObject } from 'react-router-dom';
 import { lazy } from 'react';
 
 const Home = lazy(() => import('../pages/home/page'));
 const AdminLogin = lazy(() => import('../pages/admin/page'));
+const AdminSignup = lazy(() => import('../pages/admin/signup'));
 const AdminDashboard = lazy(() => import('../pages/admin/dashboard/page'));
 const NotFound = lazy(() => import('../pages/NotFound'));
 
@@ -15,6 +16,10 @@ const routes: RouteObject[] = [
   {
     path: '/admin',
     element: <AdminLogin />,
+  },
+  {
+    path: '/admin/signup',
+    element: <AdminSignup />,
   },
   {
     path: '/admin/dashboard',

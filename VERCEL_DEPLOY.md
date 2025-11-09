@@ -1,85 +1,57 @@
-# 🚀 Vercel 배포 완료 가이드
+# Vercel Deploy Guide
 
-## ✅ 완료된 작업
-- ✅ 중복 export 오류 수정
-- ✅ Import 경로 오류 수정
-- ✅ 빌드 성공 확인
-- ✅ Git push 완료
-
----
-
-## 🔥 **지금 바로 할 일: Vercel 환경 변수 설정** (1분)
-
-### 1단계: Vercel 대시보드 접속
-```
-https://vercel.com/letyouweb/yeyakweb-puppyhotel
-```
-
-### 2단계: Settings → Environment Variables
-
-다음 2개 변수 추가:
-
-```
-VITE_PUBLIC_SUPABASE_URL
-값: https://ssvkmyscxjhrkbulujvq.supabase.co
-```
-
-```
-VITE_PUBLIC_SUPABASE_ANON_KEY
-값: sb_publishable_iBq280ikbyXnH9ikXBm-7A_q719JG5D
-```
-
-### 3단계: Redeploy
-
-Settings → Deployments → 최신 배포 → "Redeploy" 버튼 클릭
+## Prerequisite Checklist
+- Local build passes (`npm run build`)
+- Git branch up to date with `main`
+- Required environment variables exist both locally (`.env`) and in the Vercel project
 
 ---
 
-## 🎯 배포 후 테스트
+## Environment Variables (Local `.env` + Vercel Project)
+Set the following keys for every environment (`Production`, `Preview`, `Development`) inside Vercel > Project > Settings > Environment Variables. Keep them in sync with the values in `.env`.
 
-### 1. 홈페이지 접속
-```
-https://yeyakweb-puppyhotel.vercel.app
-```
+| Key | Sample Value | Notes |
+| --- | --- | --- |
+| `VITE_PUBLIC_SUPABASE_URL` | `https://ssvkmyscxjhrkbulujvq.supabase.co` | Used by the web client |
+| `VITE_PUBLIC_SUPABASE_ANON_KEY` | `sb_publishable_iBq280ikbyXnH9ikXBm-7A_q719JG5D` | Supabase anon key |
+| `VITE_SUPABASE_URL` | `https://ssvkmyscxjhrkbulujvq.supabase.co` | Convenience alias for edge/functions |
+| `VITE_SUPABASE_ANON_KEY` | same as above | Matches the public key |
+| `VITE_SOLAPI_API_KEY` | `<your SOLAPI key>` | Required for auto-SMS |
+| `VITE_SMS_SENDER` | `01012345678` | Must be a pre-registered SOLAPI sender number |
 
-### 2. 관리자 로그인
-```
-URL: https://yeyakweb-puppyhotel.vercel.app/admin
-ID: admin
-PW: puppyhotel2024
-```
-
-### 3. 대시보드 확인
-- 예약 목록이 보이는지 확인
-- 상태 변경 버튼 작동 확인
-
-### 4. 챗봇 API 테스트 (콘솔에서)
-```javascript
-// F12 → Console
-await window.getAvailableSlots('2024-12-25', 'grooming')
-```
+> After editing Vercel env vars, click **Redeploy** on the latest deployment so the new values take effect.
 
 ---
 
-## 🔧 문제 해결
-
-### "supabase is not defined" 에러
-→ Vercel 환경 변수 설정 후 재배포
-
-### 빌드 실패
-→ Vercel 로그 확인, 여기로 복사해주세요
-
-### 런타임 에러
-→ 브라우저 콘솔 (F12) 확인, 여기로 복사해주세요
-
----
-
-## 📊 배포 현황
-
-✅ 로컬 빌드: 성공
-✅ Git Push: 성공
-⏳ Vercel 배포: 환경 변수 설정 후 재배포 필요
+## Deploy Steps
+1. **Install deps & test locally**
+   ```bash
+   npm install
+   npm run build
+   ```
+2. **Commit & push**
+   ```bash
+   git add .
+   git commit -m "chore: prep deploy"
+   git push origin main
+   ```
+3. **Trigger Vercel build**
+   - Visit https://vercel.com/letyouweb/yeyakweb-puppyhotel
+   - Open the latest deployment and click **Redeploy** if it has not started automatically.
 
 ---
 
-**형님! Vercel 환경 변수 2개만 설정하고 Redeploy 하시면 바로 작동합니다!** 🚀
+## Post-Deploy Smoke Test
+- Public site: `https://yeyakweb-puppyhotel.vercel.app`
+- Admin login: `/admin` (test base auth + dashboard)
+- Chatbot helpers: open browser console and run `await window.getAvailableSlots('2024-12-25', 'grooming')`
+- Reservation status updates should still send SOLAPI SMS via the Supabase edge function
+
+---
+
+## Troubleshooting
+- **Build fails**: Check Vercel build logs; verify env variables are set.
+- **Supabase errors**: Ensure URLs/keys match the Supabase project.
+- **SMS not sending**: Confirm `VITE_SOLAPI_API_KEY` and `VITE_SMS_SENDER` and that the SOLAPI sender is pre-approved.
+
+Need help? Share the failing deployment URL or console logs along with any recent code changes.

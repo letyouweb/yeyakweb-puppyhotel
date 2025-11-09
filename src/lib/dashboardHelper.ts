@@ -1,5 +1,6 @@
 // 대시보드 Supabase 연동 헬퍼 파일
-import { supabase, reservationService, smsService, Reservation } from './supabase';
+import { reservationService, smsService } from './supabase';
+import type { Reservation } from './supabase';
 
 // Supabase 예약 데이터를 대시보드 형식으로 변환
 export function convertToLegacyFormat(reservation: Reservation) {

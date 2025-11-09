@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import type { User } from '@supabase/supabase-js';
 import GroomingCalendar from '../../../components/feature/GroomingCalendar';
 import { loadAllReservations, updateReservationStatus, subscribeToReservations } from '../../../lib/dashboardHelper';
-import { adminProfileService, adminService, calendarSettingsService, weeklyGroomingScheduleService } from '../../../lib/supabase';
+import { adminProfileService, adminService, calendarSettingsService, weeklyGroomingScheduleService, faqService, type FAQ } from '../../../lib/supabase';
 
 interface Reservation {
   id: string;
@@ -89,6 +89,12 @@ export default function AdminDashboard() {
   const [accountSaving, setAccountSaving] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
   const [passwordSaving, setPasswordSaving] = useState(false);
+  
+  // FAQ 관련 state
+  const [faqs, setFaqs] = useState<FAQ[]>([]);
+  const [faqForm, setFaqForm] = useState({ question: '', answer: '' });
+  const [editingFaqId, setEditingFaqId] = useState<string | null>(null);
+  const [faqLoading, setFaqLoading] = useState(false);
 
   const navigate = useNavigate();
 
@@ -118,14 +124,16 @@ export default function AdminDashboard() {
         setSupabaseUser(user);
         localStorage.setItem('adminAuth', 'true');
 
-        const [reservationData, calendarData, weeklyData, profile] = await Promise.all([
+        const [reservationData, calendarData, weeklyData, profile, faqData] = await Promise.all([
           loadAllReservations(),
           calendarSettingsService.getLatest(),
           weeklyGroomingScheduleService.getAll(),
-          adminProfileService.getByUserId(user.id)
+          adminProfileService.getByUserId(user.id),
+          faqService.getAll()
         ]);
 
         setReservations(reservationData);
+        setFaqs(faqData);
 
         if (calendarData) {
           setCalendarSettings({
@@ -374,6 +382,142 @@ export default function AdminDashboard() {
       alert('오류가 발생했습니다.');
     }
   };
+  
+  // FAQ 관련 핸들러 함수들
+  const loadFaqsList = async () => {
+    try {
+      setFaqLoading(true);
+      const data = await faqService.getAll();
+      setFaqs(data);
+    } catch (error) {
+      console.error('FAQ 로드 실패:', error);
+      alert('FAQ 목록을 불러오는데 실패했습니다.');
+    } finally {
+      setFaqLoading(false);
+    }
+  };
+
+  const handleAddFaq = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!faqForm.question.trim() || !faqForm.answer.trim()) {
+      alert('질문과 답변을 모두 입력해주세요.');
+      return;
+    }
+
+    try {
+      setFaqLoading(true);
+      const newFaq = await faqService.create({
+        question: faqForm.question.trim(),
+        answer: faqForm.answer.trim(),
+        display_order: faqs.length + 1,
+        is_active: true
+      });
+      setFaqs([...faqs, newFaq]);
+      setFaqForm({ question: '', answer: '' });
+      alert('✅ FAQ가 추가되었습니다!');
+    } catch (error) {
+      console.error('FAQ 추가 실패:', error);
+      alert('FAQ 추가에 실패했습니다.');
+    } finally {
+      setFaqLoading(false);
+    }
+  };
+
+  const handleEditFaq = (faq: FAQ) => {
+    setEditingFaqId(faq.id || null);
+    setFaqForm({
+      question: faq.question,
+      answer: faq.answer
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleUpdateFaq = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingFaqId || !faqForm.question.trim() || !faqForm.answer.trim()) {
+      alert('질문과 답변을 모두 입력해주세요.');
+      return;
+    }
+
+    try {
+      setFaqLoading(true);
+      const updated = await faqService.update(editingFaqId, {
+        question: faqForm.question.trim(),
+        answer: faqForm.answer.trim()
+      });
+      setFaqs(faqs.map(f => f.id === editingFaqId ? updated : f));
+      setFaqForm({ question: '', answer: '' });
+      setEditingFaqId(null);
+      alert('✅ FAQ가 수정되었습니다!');
+    } catch (error) {
+      console.error('FAQ 수정 실패:', error);
+      alert('FAQ 수정에 실패했습니다.');
+    } finally {
+      setFaqLoading(false);
+    }
+  };
+
+  const handleDeleteFaq = async (id: string) => {
+    if (!confirm('정말 이 FAQ를 삭제하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      setFaqLoading(true);
+      await faqService.delete(id);
+      setFaqs(faqs.filter(f => f.id !== id));
+      alert('✅ FAQ가 삭제되었습니다.');
+    } catch (error) {
+      console.error('FAQ 삭제 실패:', error);
+      alert('FAQ 삭제에 실패했습니다.');
+    } finally {
+      setFaqLoading(false);
+    }
+  };
+
+  const handleLoadDefaultFaqs = async () => {
+    if (!confirm('기본 FAQ를 추가하시겠습니까? (기존 FAQ에 추가됩니다)')) {
+      return;
+    }
+
+    try {
+      setFaqLoading(true);
+      const newFaqs = await faqService.loadDefaultFaqs();
+      setFaqs([...faqs, ...newFaqs]);
+      alert('✅ 기본 FAQ가 추가되었습니다!');
+    } catch (error) {
+      console.error('기본 FAQ 로드 실패:', error);
+      alert('기본 FAQ 추가에 실패했습니다.');
+    } finally {
+      setFaqLoading(false);
+    }
+  };
+
+  const handleClearAllFaqs = async () => {
+    if (!confirm('⚠️ 정말 모든 FAQ를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+      return;
+    }
+    if (!confirm('⚠️ 한 번 더 확인합니다. 정말 삭제하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      setFaqLoading(true);
+      await faqService.deleteAll();
+      setFaqs([]);
+      alert('✅ 모든 FAQ가 삭제되었습니다.');
+    } catch (error) {
+      console.error('FAQ 전체 삭제 실패:', error);
+      alert('FAQ 삭제에 실패했습니다.');
+    } finally {
+      setFaqLoading(false);
+    }
+  };
+
+  const cancelEditFaq = () => {
+    setEditingFaqId(null);
+    setFaqForm({ question: '', answer: '' });
+  };
         
   // 문자 발송 함수 (시뮬레이션)
 
@@ -507,6 +651,16 @@ export default function AdminDashboard() {
                 }`}
               >
                 <i className="ri-user-settings-line mr-2"></i>계정 관리
+              </button>
+              <button
+                onClick={() => setActiveTab('faq')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
+                  activeTab === 'faq'
+                    ? 'border-teal-500 text-teal-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <i className="ri-question-answer-line mr-2"></i>FAQ 관리
               </button>
             </nav>
           </div>
@@ -1320,6 +1474,183 @@ transition-colors whitespace-nowrap cursor-pointer"
                           <i className="ri-lock-password-line mr-2"></i>{passwordSaving ? '변경 중...' : '비밀번호 변경'}
                         </button>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'faq' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-gray-900">
+                    <i className="ri-question-answer-line mr-2 text-teal-600"></i>
+                    AI 챗봇 FAQ 관리
+                  </h3>
+                  <div className="flex items-center space-x-4">
+                    <div className="bg-teal-50 px-4 py-2 rounded-lg">
+                      <span className="text-teal-700 font-semibold">{faqs.length}개 FAQ 등록</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 rounded-lg p-4 mb-6">
+                  <div className="flex items-start">
+                    <i className="ri-lightbulb-line text-blue-600 text-2xl mr-3 mt-1"></i>
+                    <div>
+                      <h4 className="font-semibold text-blue-900 mb-2">💡 AI 챗봇이 자동으로 응답합니다</h4>
+                      <p className="text-sm text-blue-800 mb-2">
+                        여기서 등록한 FAQ는 AI 챗봇이 자동으로 학습하여 고객 문의에 24시간 실시간 응답합니다.
+                      </p>
+                      <ul className="text-sm text-blue-700 space-y-1">
+                        <li>• 질문에는 다양한 표현을 포함하세요 (예: "가격", "비용", "얼마")</li>
+                        <li>• 답변은 친절하고 명확하게 작성해주세요</li>
+                        <li>• 연락처, 영업시간 등 정확한 정보를 제공하세요</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* FAQ 추가/수정 폼 */}
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                  <h4 className="font-semibold text-gray-900 mb-4">
+                    {editingFaqId ? '✏️ FAQ 수정' : '➕ FAQ 추가'}
+                  </h4>
+                  <form onSubmit={editingFaqId ? handleUpdateFaq : handleAddFaq}>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          질문 *
+                        </label>
+                        <input
+                          type="text"
+                          value={faqForm.question}
+                          onChange={(e) => setFaqForm({ ...faqForm, question: e.target.value })}
+                          placeholder="예: 예약은 어떻게 하나요?"
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          답변 *
+                        </label>
+                        <textarea
+                          value={faqForm.answer}
+                          onChange={(e) => setFaqForm({ ...faqForm, answer: e.target.value })}
+                          placeholder="예: 홈페이지에서 온라인 예약이 가능하며, 전화(02-1234-5678) 또는 카카오톡(@puppyhotel)으로도 예약하실 수 있습니다."
+                          rows={4}
+                          className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                      <div className="flex gap-3">
+                        <button
+                          type="submit"
+                          disabled={faqLoading}
+                          className="flex-1 bg-teal-600 text-white py-2 rounded-lg font-semibold hover:bg-teal-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {faqLoading ? '처리 중...' : editingFaqId ? '✅ 수정 완료' : '➕ FAQ 추가'}
+                        </button>
+                        {editingFaqId && (
+                          <button
+                            type="button"
+                            onClick={cancelEditFaq}
+                            className="px-6 bg-gray-500 text-white py-2 rounded-lg font-semibold hover:bg-gray-600 transition-colors"
+                          >
+                            취소
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handleLoadDefaultFaqs}
+                          disabled={faqLoading}
+                          className="px-6 bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:opacity-60"
+                        >
+                          🎁 기본 FAQ
+                        </button>
+                        {faqs.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleClearAllFaqs}
+                            disabled={faqLoading}
+                            className="px-6 bg-red-600 text-white py-2 rounded-lg font-semibold hover:bg-red-700 transition-colors disabled:opacity-60"
+                          >
+                            🗑️ 전체 삭제
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </form>
+                </div>
+
+                {/* FAQ 목록 */}
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                  <h4 className="font-semibold text-gray-900 mb-4">등록된 FAQ 목록</h4>
+                  {faqLoading ? (
+                    <div className="text-center py-12">
+                      <i className="ri-loader-4-line text-4xl text-teal-600 animate-spin"></i>
+                      <p className="text-gray-600 mt-4">로딩 중...</p>
+                    </div>
+                  ) : faqs.length === 0 ? (
+                    <div className="text-center py-12">
+                      <i className="ri-inbox-line text-6xl text-gray-300 mb-4"></i>
+                      <p className="text-gray-600 mb-2">등록된 FAQ가 없습니다.</p>
+                      <p className="text-sm text-gray-500">위에서 FAQ를 추가하거나 기본 FAQ를 불러오세요.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {faqs.map((faq, index) => (
+                        <div
+                          key={faq.id}
+                          className="border border-gray-200 rounded-lg p-4 hover:border-teal-300 hover:shadow-md transition-all"
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <div className="flex items-center mb-2">
+                                <span className="bg-teal-100 text-teal-700 px-2 py-1 rounded text-xs font-semibold mr-2">
+                                  Q{index + 1}
+                                </span>
+                                <h5 className="font-semibold text-gray-900">{faq.question}</h5>
+                              </div>
+                              <p className="text-gray-600 text-sm leading-relaxed pl-12">
+                                {faq.answer}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 pl-12">
+                            <button
+                              onClick={() => handleEditFaq(faq)}
+                              disabled={faqLoading}
+                              className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors disabled:opacity-60"
+                            >
+                              ✏️ 수정
+                            </button>
+                            <button
+                              onClick={() => handleDeleteFaq(faq.id!)}
+                              disabled={faqLoading}
+                              className="px-4 py-1.5 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition-colors disabled:opacity-60"
+                            >
+                              🗑️ 삭제
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-yellow-50 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <i className="ri-information-line text-yellow-600 mr-2 mt-1"></i>
+                    <div>
+                      <h4 className="font-medium text-yellow-800 mb-1">활용 팁</h4>
+                      <ul className="text-sm text-yellow-700 space-y-1">
+                        <li>• FAQ는 AI 챗봇이 실시간으로 학습하여 즉시 적용됩니다</li>
+                        <li>• 자주 묻는 질문 TOP 10을 먼저 등록하는 것을 추천합니다</li>
+                        <li>• 계절별, 이벤트별 FAQ는 필요시 추가/삭제하세요</li>
+                        <li>• 고객 문의 패턴을 분석하여 주기적으로 업데이트하세요</li>
+                      </ul>
                     </div>
                   </div>
                 </div>

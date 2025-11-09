@@ -68,6 +68,16 @@ export interface AdminProfile {
   updated_at?: string;
 }
 
+export interface FAQ {
+  id?: string;
+  question: string;
+  answer: string;
+  display_order: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 interface AdminProfileInput {
   id?: string;
   user_id: string;
@@ -421,5 +431,96 @@ export const chatbotService = {
     });
     
     return summary;
+  }
+};
+
+export const faqService = {
+  async getAll() {
+    const { data, error } = await supabase
+      .from('faqs')
+      .select('*')
+      .eq('is_active', true)
+      .order('display_order', { ascending: true });
+    if (error) throw error;
+    return data as FAQ[];
+  },
+
+  async create(faq: Omit<FAQ, 'id' | 'created_at' | 'updated_at'>) {
+    const { data, error } = await supabase
+      .from('faqs')
+      .insert(faq)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as FAQ;
+  },
+
+  async update(id: string, updates: Partial<FAQ>) {
+    const { data, error } = await supabase
+      .from('faqs')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as FAQ;
+  },
+
+  async delete(id: string) {
+    const { error } = await supabase
+      .from('faqs')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  async deleteAll() {
+    const { error } = await supabase
+      .from('faqs')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000'); // 모든 레코드 삭제
+    if (error) throw error;
+  },
+
+  async loadDefaultFaqs() {
+    const defaultFaqs: Omit<FAQ, 'id' | 'created_at' | 'updated_at'>[] = [
+      {
+        question: '영업시간이 어떻게 되나요?',
+        answer: '매일 오전 9시부터 오후 8시까지 운영하며, 연중무휴입니다. 예약 상담은 전화나 카카오톡으로 24시간 가능합니다.',
+        display_order: 1,
+        is_active: true
+      },
+      {
+        question: '예약은 어떻게 하나요?',
+        answer: '홈페이지에서 온라인 예약이 가능하며, 전화(02-1234-5678) 또는 카카오톡(@puppyhotel)으로도 예약하실 수 있습니다.',
+        display_order: 2,
+        is_active: true
+      },
+      {
+        question: '가격이 얼마예요?',
+        answer: '서비스별로 상이합니다. 호텔: 1박 5만원~, 미용: 소형견 4만원~, 데이케어: 1일 3만원~입니다. 자세한 가격은 전화 상담 부탁드립니다.',
+        display_order: 3,
+        is_active: true
+      },
+      {
+        question: '주차는 가능한가요?',
+        answer: '네, 무료 주차 공간이 마련되어 있습니다. 최대 10대까지 주차 가능합니다.',
+        display_order: 4,
+        is_active: true
+      },
+      {
+        question: '체크인/체크아웃 시간은?',
+        answer: '호텔 체크인은 오후 2시, 체크아웃은 오전 11시입니다. 시간 조정이 필요하시면 미리 말씀해주세요.',
+        display_order: 5,
+        is_active: true
+      }
+    ];
+
+    const { data, error } = await supabase
+      .from('faqs')
+      .insert(defaultFaqs)
+      .select();
+    if (error) throw error;
+    return data as FAQ[];
   }
 };

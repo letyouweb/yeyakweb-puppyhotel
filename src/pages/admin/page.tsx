@@ -305,8 +305,8 @@ export default function AdminPage() {
 
         <div className="mt-8 pt-6 border-t border-gray-200">
           <div className="text-center text-xs text-gray-500">
-            <p>© 2024 보호자 관리 시스템 All rights reserved.</p>
-            <p className="mt-1">보안 문의: admin@pethotel.com</p>
+            <p>© 2025 yeyakweb All rights reserved.</p>
+            <p className="mt-1">문의: 010-8241-1619</p>
           </div>
         </div>
       </div>

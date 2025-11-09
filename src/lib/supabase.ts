@@ -355,37 +355,6 @@ export const settingsService = {
   }
 };
 
-const SOLAPI_API_KEY = import.meta.env.VITE_SOLAPI_API_KEY;
-const SMS_SENDER = import.meta.env.VITE_SMS_SENDER;
-
-async function sendSMS(to: string, message: string) {
-  if (!SOLAPI_API_KEY || !SMS_SENDER) {
-    console.warn('SOLAPI API key 또는 SMS 발신 번호가 설정되지 않았습니다.');
-    return;
-  }
-
-  const response = await fetch('https://api.solapi.com/messages/v4/send', {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${SOLAPI_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      message: {
-        to,
-        from: SMS_SENDER,
-        text: message,
-      },
-    }),
-  });
-
-  const result = await response.json();
-  if (!response.ok) {
-    throw new Error(`SOLAPI error: ${JSON.stringify(result)}`);
-  }
-  return result;
-}
-
 export const smsService = {
   async sendConfirmation(reservation: Reservation) {
     const message = `[PuppyHotel] ${reservation.owner_name}님의 ${reservation.pet_name} ${
@@ -393,7 +362,22 @@ export const smsService = {
     } 예약이 확정되었습니다. 일시: ${reservation.reservation_date} ${reservation.reservation_time || ''}.`;
 
     try {
-      return await sendSMS(reservation.phone, message);
+      const response = await fetch('/api/sms/confirm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: reservation.phone,
+          text: message,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result?.error || 'SMS 발송 실패');
+      }
+      return result;
     } catch (error) {
       console.error('SMS 발송 실패:', error);
       throw error;

@@ -100,7 +100,7 @@ FOR ALL USING (true);
 INSERT INTO admin_users (username, password_hash, email, security_question, security_answer_hash)
 VALUES (
   'admin',
-  'puppyhotel2024',
+  'puppyhotel2025',
   'admin@puppyhotel.com',
   '가장 좋아하는 반려동물의 이름은?',
   'puppy'

@@ -45,7 +45,7 @@ npm run dev
 #### 관리자 로그인
 - URL: http://localhost:5173/admin
 - 아이디: `admin`
-- 비밀번호: `puppyhotel2024`
+- 비밀번호: `admin2024`
 
 #### 비밀번호 찾기
 - 보안 질문: "가장 좋아하는 반려동물의 이름은?"

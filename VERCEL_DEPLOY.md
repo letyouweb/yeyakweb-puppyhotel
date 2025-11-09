@@ -16,8 +16,9 @@ Set the following keys for every environment (`Production`, `Preview`, `Developm
 | `VITE_PUBLIC_SUPABASE_ANON_KEY` | `sb_publishable_iBq280ikbyXnH9ikXBm-7A_q719JG5D` | Supabase anon key |
 | `VITE_SUPABASE_URL` | `https://ssvkmyscxjhrkbulujvq.supabase.co` | Convenience alias for edge/functions |
 | `VITE_SUPABASE_ANON_KEY` | same as above | Matches the public key |
-| `VITE_SOLAPI_API_KEY` | `<your SOLAPI key>` | Required for auto-SMS |
-| `VITE_SMS_SENDER` | `01012345678` | Must be a pre-registered SOLAPI sender number |
+| `SOLAPI_API_KEY` | `<your SOLAPI key>` | Consumed by `api/sms/confirm` |
+| `SOLAPI_API_SECRET` | `<your SOLAPI secret>` | Pair with the key above |
+| `SMS_SENDER` | `01012345678` | Must be a pre-registered SOLAPI sender number |
 
 > After editing Vercel env vars, click **Redeploy** on the latest deployment so the new values take effect.
 
@@ -52,6 +53,6 @@ Set the following keys for every environment (`Production`, `Preview`, `Developm
 ## Troubleshooting
 - **Build fails**: Check Vercel build logs; verify env variables are set.
 - **Supabase errors**: Ensure URLs/keys match the Supabase project.
-- **SMS not sending**: Confirm `VITE_SOLAPI_API_KEY` and `VITE_SMS_SENDER` and that the SOLAPI sender is pre-approved.
+- **SMS not sending**: Confirm `SOLAPI_API_KEY`, `SOLAPI_API_SECRET`, `SMS_SENDER`, and that the SOLAPI sender is pre-approved.
 
 Need help? Share the failing deployment URL or console logs along with any recent code changes.

@@ -2,7 +2,7 @@
 // 이 컴포넌트를 홈페이지에 추가하면 챗봇이 예약 상황을 실시간으로 조회할 수 있습니다
 
 import { useEffect, useState } from 'react';
-import { chatbotService, reservationService } from '../../lib/supabase';
+import { chatbotService, reservationService } from '../lib/supabase';
 
 interface ReservationStatus {
   date: string;

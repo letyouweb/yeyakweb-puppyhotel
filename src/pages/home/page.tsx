@@ -5,19 +5,6 @@ import HotelCalendar from '../../components/feature/HotelCalendar';
 import RealtimeReservationSync from '../../components/feature/RealtimeReservationSync';
 import ChatbotReservationAPI from '../../components/ChatbotReservationAPI';
 
-
-export default function HomePage() {
-  return (
-    <div className="main-content-wrapper">
-      {/* 여기에 기존의 홈 페이지 콘텐츠가 들어갑니다 */}
-      
-      {/* 챗봇 컴포넌트 추가 */}
-      <ChatbotReservationAPI /> 
-      
-    </div>
-  );
-}
-
 export default function HomePage() {
   const [activeService, setActiveService] = useState('hotel');
   const [showCalendar, setShowCalendar] = useState(false);
@@ -167,6 +154,9 @@ export default function HomePage() {
     <div className="min-h-screen bg-white">
       {/* 실시간 예약 동기화 컴포넌트 */}
       <RealtimeReservationSync />
+      
+      {/* 챗봇 예약 조회 API */}
+      <ChatbotReservationAPI />
 
       {/* Header */}
       <header className="bg-white shadow-sm sticky top-0 z-50">

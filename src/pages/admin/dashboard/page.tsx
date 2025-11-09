@@ -1,7 +1,10 @@
+
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { User } from '@supabase/supabase-js';
 import GroomingCalendar from '../../../components/feature/GroomingCalendar';
 import { loadAllReservations, updateReservationStatus, subscribeToReservations } from '../../../lib/dashboardHelper';
+import { adminProfileService, adminService, calendarSettingsService, weeklyGroomingScheduleService } from '../../../lib/supabase';
 
 interface Reservation {
   id: string;
@@ -20,51 +23,72 @@ interface Reservation {
 
 interface AdminAccount {
   username: string;
-  password: string;
   email: string;
   securityQuestion: string;
-  securityAnswer: string;
+  securityAnswer?: string;
 }
 
 interface WeeklySchedule {
   [key: string]: {
+    id?: string;
     isOpen: boolean;
     timeSlots: string[];
     maxBookings: number;
   };
 }
 
+const DEFAULT_AVAILABLE_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+const DEFAULT_CALENDAR_SETTINGS = {
+  isEnabled: false,
+  businessHours: {
+    start: '09:00',
+    end: '20:00'
+  },
+  availableDays: [...DEFAULT_AVAILABLE_DAYS],
+  maxBookingsPerDay: 20
+};
+
+const DEFAULT_WEEKLY_SCHEDULE: WeeklySchedule = {
+  monday: { isOpen: true, timeSlots: ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'], maxBookings: 8 },
+  tuesday: { isOpen: true, timeSlots: ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'], maxBookings: 8 },
+  wednesday: { isOpen: true, timeSlots: ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'], maxBookings: 8 },
+  thursday: { isOpen: true, timeSlots: ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'], maxBookings: 8 },
+  friday: { isOpen: true, timeSlots: ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'], maxBookings: 8 },
+  saturday: { isOpen: true, timeSlots: ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00'], maxBookings: 6 },
+  sunday: { isOpen: false, timeSlots: [], maxBookings: 0 }
+};
+
+const cloneDefaultCalendarSettings = () => ({
+  ...DEFAULT_CALENDAR_SETTINGS,
+  businessHours: { ...DEFAULT_CALENDAR_SETTINGS.businessHours },
+  availableDays: [...DEFAULT_AVAILABLE_DAYS]
+});
+
+const createDefaultWeeklySchedule = (): WeeklySchedule => JSON.parse(JSON.stringify(DEFAULT_WEEKLY_SCHEDULE));
+
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('calendar');
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [adminAccount, setAdminAccount] = useState<AdminAccount>({
     username: 'admin',
-    password: 'puppyhotel2024',
     email: 'admin@puppyhotel.com',
     securityQuestion: '가장 좋아하는 반려동물의 이름은?',
-    securityAnswer: 'puppy'
+    securityAnswer: ''
   });
   const [isEditingAccount, setIsEditingAccount] = useState(false);
-  const [calendarSettings, setCalendarSettings] = useState({
-    isEnabled: false,
-    businessHours: {
-      start: '09:00',
-      end: '20:00'
-    },
-    availableDays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
-    maxBookingsPerDay: 20
-  });
+  const [calendarSettings, setCalendarSettings] = useState(() => cloneDefaultCalendarSettings());
 
   // 요일별 미용예약 설정
-  const [weeklyGroomingSchedule, setWeeklyGroomingSchedule] = useState<WeeklySchedule>({
-    monday: { isOpen: true, timeSlots: ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'], maxBookings: 8 },
-    tuesday: { isOpen: true, timeSlots: ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'], maxBookings: 8 },
-    wednesday: { isOpen: true, timeSlots: ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'], maxBookings: 8 },
-    thursday: { isOpen: true, timeSlots: ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'], maxBookings: 8 },
-    friday: { isOpen: true, timeSlots: ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'], maxBookings: 8 },
-    saturday: { isOpen: true, timeSlots: ['09:00', '10:00', '11:00', '13:00', '14:00', '15:00'], maxBookings: 6 },
-    sunday: { isOpen: false, timeSlots: [], maxBookings: 0 }
-  });
+  const [weeklyGroomingSchedule, setWeeklyGroomingSchedule] = useState<WeeklySchedule>(() => createDefaultWeeklySchedule());
+  const [supabaseUser, setSupabaseUser] = useState<User | null>(null);
+  const [adminProfileId, setAdminProfileId] = useState<string | null>(null);
+  const [calendarSettingsId, setCalendarSettingsId] = useState<string | null>(null);
+  const [calendarSaving, setCalendarSaving] = useState(false);
+  const [weeklyScheduleSaving, setWeeklyScheduleSaving] = useState(false);
+  const [accountSaving, setAccountSaving] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
+  const [passwordSaving, setPasswordSaving] = useState(false);
 
   const navigate = useNavigate();
 
@@ -79,185 +103,205 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    // 관리자 인증 확인
-    const isAuthenticated = localStorage.getItem('isAdminLoggedIn');
-    if (!isAuthenticated) {
+    let subscription: { unsubscribe: () => void } | null = null;
+
+    const initializeDashboard = async () => {
+      try {
+        const session = await adminService.getSession();
+        const user = session?.user;
+
+        if (!user) {
+          navigate('/admin');
+          return;
+        }
+
+        setSupabaseUser(user);
+        localStorage.setItem('adminAuth', 'true');
+
+        const [reservationData, calendarData, weeklyData, profile] = await Promise.all([
+          loadAllReservations(),
+          calendarSettingsService.getLatest(),
+          weeklyGroomingScheduleService.getAll(),
+          adminProfileService.getByUserId(user.id)
+        ]);
+
+        setReservations(reservationData);
+
+        if (calendarData) {
+          setCalendarSettings({
+            isEnabled: calendarData.is_enabled,
+            businessHours: calendarData.business_hours || DEFAULT_CALENDAR_SETTINGS.businessHours,
+            availableDays: calendarData.available_days || DEFAULT_AVAILABLE_DAYS,
+            maxBookingsPerDay: calendarData.max_bookings_per_day || DEFAULT_CALENDAR_SETTINGS.maxBookingsPerDay
+          });
+          setCalendarSettingsId(calendarData.id || null);
+        } else {
+          setCalendarSettings(cloneDefaultCalendarSettings());
+          setCalendarSettingsId(null);
+        }
+
+        if (weeklyData?.length) {
+          const normalized: WeeklySchedule = createDefaultWeeklySchedule();
+          weeklyData.forEach((row) => {
+            const key = (row.day_of_week || '').toLowerCase();
+            if (!key) return;
+            normalized[key] = {
+              id: row.id,
+              isOpen: row.is_open,
+              timeSlots: row.time_slots || [],
+              maxBookings: row.max_bookings ?? DEFAULT_WEEKLY_SCHEDULE[key]?.maxBookings ?? 8
+            };
+          });
+          setWeeklyGroomingSchedule(normalized);
+        } else {
+          setWeeklyGroomingSchedule(createDefaultWeeklySchedule());
+        }
+
+        if (profile) {
+          setAdminProfileId(profile.id || null);
+          setAdminAccount({
+            username: profile.username || 'admin',
+            email: profile.email || user.email || 'admin@puppyhotel.com',
+            securityQuestion: profile.security_question || '가장 좋아하는 반려동물의 이름은?',
+            securityAnswer: ''
+          });
+        } else {
+          setAdminAccount((prev) => ({
+            ...prev,
+            email: user.email || prev.email
+          }));
+        }
+      } catch (error) {
+        console.error('대시보드 초기화 실패:', error);
+      }
+    };
+
+    initializeDashboard();
+
+    subscription = subscribeToReservations((update) => {
+      if (update.type === 'INSERT' || update.type === 'UPDATE') {
+        setReservations((prev) => {
+          const exists = prev.find((r) => r.id === update.data.id);
+          if (exists) {
+            return prev.map((r) => (r.id === update.data.id ? update.data : r));
+          }
+          return [...prev, update.data];
+        });
+      } else if (update.type === 'DELETE') {
+        setReservations((prev) => prev.filter((r) => r.id !== update.id));
+      }
+    });
+
+    return () => {
+      subscription?.unsubscribe();
+    };
+  }, [navigate]);
+
+
+  const handleLogout = async () => {
+    try {
+      await adminService.logout();
+    } finally {
+      localStorage.removeItem('adminAuth');
+      navigate('/');
+    }
+  };
+
+  const handleCalendarSetup = async () => {
+    const updatedSettings = { ...calendarSettings, isEnabled: true };
+    setCalendarSettings(updatedSettings);
+    setCalendarSaving(true);
+
+    try {
+      const saved = await calendarSettingsService.upsert({
+        id: calendarSettingsId || undefined,
+        is_enabled: true,
+        business_hours: updatedSettings.businessHours,
+        available_days: updatedSettings.availableDays,
+        max_bookings_per_day: updatedSettings.maxBookingsPerDay
+      });
+      setCalendarSettingsId(saved.id || null);
+      alert('캘린더 설정이 Supabase에 저장되었습니다. AI 상담 챗봇이 24시간 예약 문의를 처리합니다.');
+    } catch (error) {
+      console.error('캘린더 설정 저장 실패:', error);
+      alert('캘린더 설정 저장 중 오류가 발생했습니다.');
+    } finally {
+      setCalendarSaving(false);
+    }
+  };
+
+  const handleAccountUpdate = async () => {
+    if (!supabaseUser) {
+      alert('세션이 만료되었습니다. 다시 로그인해 주세요.');
       navigate('/admin');
       return;
     }
 
-    // Supabase에서 실시간 예약 데이터 불러오기
-    const loadData = async () => {
-      try {
-        const data = await loadAllReservations();
-        setReservations(data);
-      } catch (error) {
-        console.error('데이터 로드 실패:', error);
+    setAccountSaving(true);
+    try {
+      const profile = await adminProfileService.upsert({
+        id: adminProfileId || undefined,
+        user_id: supabaseUser.id,
+        username: adminAccount.username,
+        email: adminAccount.email,
+        security_question: adminAccount.securityQuestion,
+        security_answer: adminAccount.securityAnswer?.trim() ? adminAccount.securityAnswer : undefined
+      });
+      setAdminProfileId(profile.id || null);
+
+      if (adminAccount.email && supabaseUser.email !== adminAccount.email) {
+        await adminService.updateEmail(adminAccount.email);
       }
-    };
 
-    loadData();
-
-    // 실시간 구독 설정
-    const subscription = subscribeToReservations((update) => {
-      if (update.type === 'INSERT' || update.type === 'UPDATE') {
-        setReservations(prev => {
-          const exists = prev.find(r => r.id === update.data.id);
-          if (exists) {
-            return prev.map(r => r.id === update.data.id ? update.data : r);
-          } else {
-            return [...prev, update.data];
-          }
-        });
-      } else if (update.type === 'DELETE') {
-        setReservations(prev => prev.filter(r => r.id !== update.id));
-      }
-    });
-
-    // 정리
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [navigate]);
-
-  const loadReservationData = () => {
-    // 전체 예약 데이터 불러오기
-    const allReservations = JSON.parse(localStorage.getItem('allReservations') || '[]');
-    const hotelReservations = JSON.parse(localStorage.getItem('hotelReservations') || '[]');
-    const groomingReservations = JSON.parse(localStorage.getItem('groomingReservations') || '[]');
-    
-    // 기존 모의 데이터와 실제 예약 데이터 합치기
-    const mockData: Reservation[] = [
-      {
-        id: '1',
-        petName: '초코',
-        ownerName: '김민수',
-        service: 'grooming',
-        date: new Date().toISOString().split('T')[0],
-        time: '10:00',
-        status: 'confirmed',
-        phone: '010-1234-5678',
-        style: '전체미용'
-      },
-      {
-        id: '2',
-        petName: '바둑이',
-        ownerName: '이영희',
-        service: 'hotel',
-        date: new Date().toISOString().split('T')[0],
-        time: '14:00',
-        status: 'pending',
-        phone: '010-2345-6789',
-        roomType: '중형견룸',
-        checkIn: new Date().toISOString().split('T')[0],
-        checkOut: new Date(Date.now() + 86400000).toISOString().split('T')[0]
-      },
-      {
-        id: '3',
-        petName: '뽀삐',
-        ownerName: '박철수',
-        service: 'grooming',
-        date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-        time: '11:30',
-        status: 'pending',
-        phone: '010-3456-7890',
-        style: '부분컷'
-      },
-      {
-        id: '4',
-        petName: '코코',
-        ownerName: '정수진',
-        service: 'daycare',
-        date: new Date().toISOString().split('T')[0],
-        time: '09:00',
-        status: 'completed',
-        phone: '010-4567-8901'
-      },
-      {
-        id: '5',
-        petName: '몽이',
-        ownerName: '최동훈',
-        service: 'grooming',
-        date: new Date(Date.now() + 172800000).toISOString().split('T')[0],
-        time: '15:00',
-        status: 'pending',
-        phone: '010-5678-9012',
-        style: '목욕+컷'
-      },
-      {
-        id: '6',
-        petName: '루루',
-        ownerName: '한지민',
-        service: 'hotel',
-        date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-        time: '16:00',
-        status: 'pending',
-        phone: '010-6789-0123',
-        roomType: '소형견룸',
-        checkIn: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-        checkOut: new Date(Date.now() + 259200000).toISOString().split('T')[0]
-      },
-      {
-        id: '7',
-        petName: '보리',
-        ownerName: '송민호',
-        service: 'daycare',
-        date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-        time: '08:00',
-        status: 'pending',
-        phone: '010-7890-1234'
-      }
-    ];
-
-    // 실제 예약 데이터를 Reservation 형식으로 변환
-    const convertedReservations = allReservations.map((reservation: any) => ({
-      id: reservation.id,
-      petName: reservation.petName,
-      ownerName: reservation.ownerName || '고객',
-      service: reservation.service,
-      date: reservation.date || reservation.checkIn,
-      time: reservation.time || '미정',
-      status: reservation.status,
-      phone: reservation.phone,
-      roomType: reservation.roomType,
-      checkIn: reservation.checkIn,
-      checkOut: reservation.checkOut,
-      style: reservation.style
-    }));
-
-    // 모의 데이터와 실제 데이터 합치기
-    const combinedReservations = [...mockData, ...convertedReservations];
-    setReservations(combinedReservations);
+      setAdminAccount((prev) => ({ ...prev, securityAnswer: '' }));
+      setIsEditingAccount(false);
+      alert('관리자 계정 정보가 Supabase에 안전하게 저장되었습니다.');
+    } catch (error) {
+      console.error('관리자 계정 저장 실패:', error);
+      alert('계정 정보를 저장하지 못했습니다.');
+    } finally {
+      setAccountSaving(false);
+    }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('adminAuth');
-    navigate('/');
-  };
+  const handlePasswordChange = async () => {
+    if (!supabaseUser) {
+      alert('세션이 만료되었습니다. 다시 로그인해 주세요.');
+      navigate('/admin');
+      return;
+    }
 
-  const handleCalendarSetup = () => {
-    const updatedSettings = { ...calendarSettings, isEnabled: true };
-    setCalendarSettings(updatedSettings);
-    localStorage.setItem('calendarSettings', JSON.stringify(updatedSettings));
-    alert('캘린더 설정이 완료되었습니다. AI 상담 챗봇이 24시간 예약 문의를 받을 수 있습니다.');
-  };
+    if (passwordForm.newPassword.length < 8) {
+      alert('비밀번호는 최소 8자리 이상이어야 합니다.');
+      return;
+    }
 
-  const handleAccountUpdate = () => {
-    localStorage.setItem('adminAccount', JSON.stringify(adminAccount));
-    setIsEditingAccount(false);
-    alert('관리자 계정 정보가 업데이트되었습니다.');
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      alert('비밀번호가 일치하지 않습니다.');
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      await adminService.updatePassword(passwordForm.newPassword);
+      setPasswordForm({ newPassword: '', confirmPassword: '' });
+      alert('비밀번호가 안전하게 변경되었습니다.');
+    } catch (error) {
+      console.error('비밀번호 변경 실패:', error);
+      alert('비밀번호를 변경하지 못했습니다.');
+    } finally {
+      setPasswordSaving(false);
+    }
   };
 
   const handleWeeklyScheduleUpdate = (day: string, field: string, value: any) => {
-    const updatedSchedule = {
-      ...weeklyGroomingSchedule,
+    setWeeklyGroomingSchedule((prev) => ({
+      ...prev,
       [day]: {
-        ...weeklyGroomingSchedule[day],
+        ...prev[day],
         [field]: value
       }
-    };
-    setWeeklyGroomingSchedule(updatedSchedule);
-    localStorage.setItem('weeklyGroomingSchedule', JSON.stringify(updatedSchedule));
+    }));
   };
 
   const addTimeSlot = (day: string, time: string) => {
@@ -272,22 +316,53 @@ export default function AdminDashboard() {
     handleWeeklyScheduleUpdate(day, 'timeSlots', newTimeSlots);
   };
 
+  const handleWeeklyScheduleSave = async () => {
+    setWeeklyScheduleSaving(true);
+    try {
+      const payload = Object.entries(weeklyGroomingSchedule).map(([day, schedule]) => ({
+        id: schedule.id,
+        day_of_week: day,
+        is_open: schedule.isOpen,
+        time_slots: schedule.timeSlots,
+        max_bookings: schedule.maxBookings
+      }));
+
+      const saved = await weeklyGroomingScheduleService.upsert(payload);
+      if (saved?.length) {
+        const normalized = { ...weeklyGroomingSchedule };
+        saved.forEach((row) => {
+          const key = (row.day_of_week || '').toLowerCase();
+          if (!key) return;
+          normalized[key] = {
+            id: row.id,
+            isOpen: row.is_open,
+            timeSlots: row.time_slots || [],
+            maxBookings: row.max_bookings
+          };
+        });
+        setWeeklyGroomingSchedule(normalized);
+      }
+      alert('요일별 미용예약 설정이 Supabase에 저장되었습니다.');
+    } catch (error) {
+      console.error('주간 스케줄 저장 실패:', error);
+      alert('요일별 미용예약 설정 저장에 실패했습니다.');
+    } finally {
+      setWeeklyScheduleSaving(false);
+    }
+  };
+
   // 예약 상태 변경 함수
   const handleStatusChange = async (
     reservationId: string,
     newStatus: 'confirmed' | 'pending' | 'completed' | 'cancelled'
   ) => {
     try {
-      // Supabase 업데이트 + SMS 자동 발송
       const result = await updateReservationStatus(reservationId, newStatus, true);
-      
       if (result.success) {
-        // 로컬 상태 업데이트
-        setReservations(prev =>
-          prev.map(r => r.id === reservationId ? result.data : r)
+        setReservations((prev) =>
+          prev.map((reservation) => (reservation.id === reservationId ? result.data : reservation))
         );
-        
-        // 성공 알림
+
         if (newStatus === 'confirmed') {
           alert('예약이 확정되었으며, 고객에게 문자가 발송되었습니다.');
         }
@@ -299,6 +374,9 @@ export default function AdminDashboard() {
       alert('오류가 발생했습니다.');
     }
   };
+        
+  // 문자 발송 함수 (시뮬레이션)
+
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -361,6 +439,26 @@ export default function AdminDashboard() {
           <div className="border-b border-gray-200">
             <nav className="-mb-px flex space-x-8 px-6">
               <button
+                onClick={() => setActiveTab('calendar')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
+                  activeTab === 'calendar'
+                    ? 'border-teal-500 text-teal-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <i className="ri-calendar-line mr-2"></i>캘린더 설정
+              </button>
+              <button
+                onClick={() => setActiveTab('weekly-schedule')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
+                  activeTab === 'weekly-schedule'
+                    ? 'border-teal-500 text-teal-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <i className="ri-scissors-line mr-2"></i>요일별 미용예약 설정
+              </button>
+              <button
                 onClick={() => setActiveTab('reservations')}
                 className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
                   activeTab === 'reservations'
@@ -400,10 +498,227 @@ export default function AdminDashboard() {
               >
                 <i className="ri-home-heart-line mr-2"></i>데이케어
               </button>
+              <button
+                onClick={() => setActiveTab('account')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
+                  activeTab === 'account'
+                    ? 'border-teal-500 text-teal-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <i className="ri-user-settings-line mr-2"></i>계정 관리
+              </button>
             </nav>
           </div>
 
           <div className="p-6">
+            {activeTab === 'calendar' && (
+              <div className="space-y-6">
+                <div className="bg-teal-50 rounded-lg p-6">
+                  <div className="flex items-center mb-4">
+                    <div className="w-12 h-12 bg-teal-100 rounded-full flex items-center justify-center mr-4">
+                      <i className="ri-calendar-check-line text-2xl text-teal-600"></i>
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">AI 상담 챗봇 캘린더 설정</h3>
+                      <p className="text-gray-600">고객들이 24시간 예약 문의를 할 수 있도록 설정합니다</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid md:grid-cols-2 gap-6 mb-6">
+                    <div className="bg-white rounded-lg p-4">
+                      <h4 className="font-semibold text-gray-900 mb-3">
+                        <i className="ri-time-line mr-2 text-teal-600"></i>영업시간 설정
+                      </h4>
+                      <div className="space-y-3">
+                        <div className="flex items-center space-x-3">
+                          <label className="text-sm font-medium text-gray-700">시작 시간:</label>
+                          <input
+                            type="time"
+                            value={calendarSettings.businessHours.start}
+                            onChange={(e) => setCalendarSettings({
+                              ...calendarSettings,
+                              businessHours: { ...calendarSettings.businessHours, start: e.target.value }
+                            })}
+                            className="border border-gray-300 rounded px-2 py-1 text-sm"
+                          />
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <label className="text-sm font-medium text-gray-700">종료 시간:</label>
+                          <input
+                            type="time"
+                            value={calendarSettings.businessHours.end}
+                            onChange={(e) => setCalendarSettings({
+                              ...calendarSettings,
+                              businessHours: { ...calendarSettings.businessHours, end: e.target.value }
+                            })}
+                            className="border border-gray-300 rounded px-2 py-1 text-sm"
+                          />
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <label className="text-sm font-medium text-gray-700">일일 최대 예약:</label>
+                          <input
+                            type="number"
+                            value={calendarSettings.maxBookingsPerDay}
+                            onChange={(e) => setCalendarSettings({
+                              ...calendarSettings,
+                              maxBookingsPerDay: parseInt(e.target.value)
+                            })}
+                            className="border border-gray-300 rounded px-2 py-1 text-sm w-20"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-white rounded-lg p-4">
+                      <h4 className="font-semibold text-gray-900 mb-3">
+                        <i className="ri-robot-line mr-2 text-teal-600"></i>AI 챗봇 상태
+                      </h4>
+                      <div className="space-y-2 text-sm text-gray-600">
+                        <div className="flex items-center">
+                          <div className={`w-3 h-3 rounded-full mr-2 ${calendarSettings.isEnabled ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                          <span>{calendarSettings.isEnabled ? '활성화됨' : '비활성화됨'}</span>
+                        </div>
+                        <p>• 24시간 자동 응답</p>
+                        <p>• 예약 가능 시간 안내</p>
+                        <p>• 서비스 정보 제공</p>
+                        <p>• 실시간 예약 접수</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleCalendarSetup}
+                    disabled={calendarSaving}
+                    className="w-full bg-teal-600 text-white py-4 rounded-lg font-semibold hover:bg-teal-700 transition-colors whitespace-nowrap cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <i className="ri-calendar-check-line mr-2"></i>{calendarSaving ? '저장 중...' : '캘린더 설정 완료하기'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'weekly-schedule' && (
+              <div className="space-y-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
+                  <h3 className="text-xl font-bold text-gray-900">요일별 미용예약 설정</h3>
+                  <div className="flex items-center space-x-4">
+                    <div className="text-sm text-gray-600">
+                      <i className="ri-information-line mr-1"></i>
+                      각 요일별로 운영시간과 예약 가능 시간을 설정하세요
+                    </div>
+                    <button
+                      onClick={handleWeeklyScheduleSave}
+                      disabled={weeklyScheduleSaving}
+                      className="bg-teal-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-teal-700 transition-colors whitespace-nowrap cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <i className="ri-save-line mr-2"></i>{weeklyScheduleSaving ? '저장 중...' : '설정 저장'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid gap-6">
+                  {Object.entries(weeklyGroomingSchedule).map(([day, schedule]) => (
+                    <div key={day} className="bg-white rounded-lg border border-gray-200 p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center">
+                          <h4 className="text-lg font-semibold text-gray-900 mr-4">
+                            {dayNames[day as keyof typeof dayNames]}
+                          </h4>
+                          <label className="flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={schedule.isOpen}
+                              onChange={(e) => handleWeeklyScheduleUpdate(day, 'isOpen', e.target.checked)}
+                              className="sr-only"
+                            />
+                            <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${schedule.isOpen ? 'bg-teal-600' : 'bg-gray-200'}`}>
+                              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${schedule.isOpen ? 'translate-x-6' : 'translate-x-1'}`} />
+                            </div>
+                            <span className="ml-2 text-sm text-gray-600">
+                              {schedule.isOpen ? '운영' : '휴무'}
+                            </span>
+                          </label>
+                        </div>
+                        {schedule.isOpen && (
+                          <div className="flex items-center space-x-4">
+                            <div className="flex items-center space-x-2">
+                              <label className="text-sm font-medium text-gray-700">최대 예약:</label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="20"
+                                value={schedule.maxBookings}
+                                onChange={(e) => handleWeeklyScheduleUpdate(day, 'maxBookings', parseInt(e.target.value))}
+                                className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                              />
+                              <span className="text-sm text-gray-600">건</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {schedule.isOpen && (
+                        <div>
+                          <div className="mb-4">
+                            <h5 className="text-sm font-medium text-gray-700 mb-2">예약 가능 시간</h5>
+                            <div className="flex flex-wrap gap-2 mb-3">
+                              {schedule.timeSlots.map((time) => (
+                                <div key={time} className="flex items-center bg-teal-50 rounded-lg px-3 py-1">
+                                  <span className="text-sm text-teal-700">{time}</span>
+                                  <button
+                                    onClick={() => removeTimeSlot(day, time)}
+                                    className="ml-2 text-teal-500 hover:text-teal-700 cursor-pointer"
+                                  >
+                                    <i className="ri-close-line text-xs"></i>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="time"
+                                id={`time-${day}`}
+                                className="border border-gray-300 rounded px-2 py-1 text-sm"
+                              />
+                              <button
+                                onClick={() => {
+                                  const input = document.getElementById(`time-${day}`) as HTMLInputElement;
+                                  if (input.value) {
+                                    addTimeSlot(day, input.value);
+                                    input.value = '';
+                                  }
+                                }}
+                                className="bg-teal-600 text-white px-3 py-1 rounded text-sm hover:bg-teal-7
+
+transition-colors whitespace-nowrap cursor-pointer"
+                              >
+                                <i className="ri-add-line mr-1"></i>시간 추가
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-yellow-50 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <i className="ri-lightbulb-line text-yellow-600 mr-2 mt-1"></i>
+                    <div>
+                      <h4 className="font-medium text-yellow-800 mb-1">설정 팁</h4>
+                      <ul className="text-sm text-yellow-700 space-y-1">
+                        <li>• 점심시간(12:00-13:00)은 제외하고 설정하는 것을 권장합니다</li>
+                        <li>• 미용 서비스는 보통 1-2시간이 소요되므로 충분한 간격을 두세요</li>
+                        <li>• 주말에는 예약이 몰릴 수 있으니 최대 예약 수를 조정하세요</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'reservations' && (
               <div className="space-y-6">
                 <h3 className="text-xl font-bold text-gray-900">예약 관리</h3>
@@ -531,9 +846,15 @@ export default function AdminDashboard() {
 
             {activeTab === 'grooming' && (
               <div className="space-y-6">
-                <h3 className="text-xl font-bold text-gray-900">미용 예약 현황</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-bold text-gray-900">미용예약현황</h3>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                    <span className="text-sm text-gray-600">실시간 업데이트</span>
+                  </div>
+                </div>
                 
-                <div className="grid md:grid-cols-3 gap-6">
+                <div className="grid md:grid-cols-4 gap-6">
                   <div className="bg-pink-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h4 className="font-semibold text-gray-900">오늘 미용</h4>
@@ -541,15 +862,7 @@ export default function AdminDashboard() {
                         {groomingReservations.filter(r => r.date === new Date().toISOString().split('T')[0]).length}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600">오늘 예정된 미용</p>
-                  </div>
-                  
-                  <div className="bg-purple-50 rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">이번 주</h4>
-                      <span className="text-2xl font-bold text-purple-600">{groomingReservations.length}</span>
-                    </div>
-                    <p className="text-sm text-gray-600">전체 미용 예약</p>
+                    <p className="text-sm text-gray-600">진행 중인 미용</p>
                   </div>
                   
                   <div className="bg-indigo-50 rounded-lg p-6">
@@ -559,41 +872,68 @@ export default function AdminDashboard() {
                         {groomingReservations.filter(r => r.status === 'pending').length}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600">확정 대기 미용</p>
+                    <p className="text-sm text-gray-600">예약 대기</p>
+                  </div>
+                  
+                  <div className="bg-green-50 rounded-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-semibold text-gray-900">완료</h4>
+                      <span className="text-2xl font-bold text-green-600">
+                        {groomingReservations.filter(r => r.status === 'completed').length}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600">오늘 완료</p>
+                  </div>
+                  
+                  <div className="bg-orange-50 rounded-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-semibold text-gray-900">총 예약</h4>
+                      <span className="text-2xl font-bold text-orange-600">{groomingReservations.length}</span>
+                    </div>
+                    <p className="text-sm text-gray-600">이번 주 전체</p>
                   </div>
                 </div>
 
+                {/* 미용 예약 달력 */}
+                <GroomingCalendar />
+
                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                  <div className="px-6 py-4 border-b border-gray-200">
-                    <h4 className="font-semibold text-gray-900">미용 예약 목록</h4>
+                  <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                    <h4 className="font-semibold text-gray-900">미용 예약 상세 현황</h4>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">시간</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반려동물</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">보호자</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">미용 스타일</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">날짜/시간</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">날짜</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">미용스타일</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상태</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">연락처</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">관리</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {groomingReservations.map((reservation) => (
                           <tr key={reservation.id} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {reservation.petName}
+                              {reservation.time}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              <div className="flex items-center">
+                                <i className="ri-scissors-line mr-2 text-pink-500"></i>
+                                {reservation.petName}
+                              </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {reservation.ownerName}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {reservation.style || '기본 미용'}
+                              {reservation.date}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {reservation.date} {reservation.time}
+                              {reservation.style || '기본미용'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(reservation.status)}`}>
@@ -603,31 +943,9 @@ export default function AdminDashboard() {
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {reservation.phone}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                              {reservation.status === 'pending' && (
-                                <button
-                                  onClick={() => handleStatusChange(reservation.id, 'confirmed')}
-                                  className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700 transition-colors whitespace-nowrap cursor-pointer mr-2"
-                                >
-                                  <i className="ri-check-line mr-1"></i>확정
-                                </button>
-                              )}
-                              {reservation.status === 'confirmed' && (
-                                <button
-                                  onClick={() => handleStatusChange(reservation.id, 'completed')}
-                                  className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 transition-colors whitespace-nowrap cursor-pointer mr-2"
-                                >
-                                  <i className="ri-check-double-line mr-1"></i>완료
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handleStatusChange(reservation.id, 'cancelled')}
-                                className="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700 transition-colors whitespace-nowrap cursor-pointer"
-                              >
-                                <i className="ri-close-line mr-1"></i>취소
-                              </button>
+                              <a href={`tel:${reservation.phone}`} className="text-teal-600 hover:text-teal-800 cursor-pointer">
+                                {reservation.phone}
+                              </a>
                             </td>
                           </tr>
                         ))}
@@ -635,125 +953,62 @@ export default function AdminDashboard() {
                     </table>
                   </div>
                 </div>
-
-                <div className="bg-white rounded-lg border border-gray-200 p-6">
-                  <h4 className="font-semibold text-gray-900 mb-4">요일별 미용 예약 설정</h4>
-                  <div className="space-y-4">
-                    {Object.entries(weeklyGroomingSchedule).map(([day, schedule]) => (
-                      <div key={day} className="border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <h5 className="font-medium text-gray-900">{dayNames[day as keyof typeof dayNames]}</h5>
-                          <label className="flex items-center">
-                            <input
-                              type="checkbox"
-                              checked={schedule.isOpen}
-                              onChange={(e) => handleWeeklyScheduleUpdate(day, 'isOpen', e.target.checked)}
-                              className="mr-2"
-                            />
-                            <span className="text-sm text-gray-600">운영</span>
-                          </label>
-                        </div>
-                        
-                        {schedule.isOpen && (
-                          <div className="space-y-3">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">예약 가능 시간</label>
-                              <div className="flex flex-wrap gap-2 mb-2">
-                                {schedule.timeSlots.map((time) => (
-                                  <span
-                                    key={time}
-                                    className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-teal-100 text-teal-800"
-                                  >
-                                    {time}
-                                    <button
-                                      onClick={() => removeTimeSlot(day, time)}
-                                      className="ml-2 text-teal-600 hover:text-teal-800 cursor-pointer"
-                                    >
-                                      <i className="ri-close-line"></i>
-                                    </button>
-                                  </span>
-                                ))}
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <input
-                                  type="time"
-                                  id={`time-${day}`}
-                                  className="border border-gray-300 rounded px-3 py-1 text-sm"
-                                />
-                                <button
-                                  onClick={() => {
-                                    const input = document.getElementById(`time-${day}`) as HTMLInputElement;
-                                    if (input.value) {
-                                      addTimeSlot(day, input.value);
-                                      input.value = '';
-                                    }
-                                  }}
-                                  className="bg-teal-600 text-white px-3 py-1 rounded text-sm hover:bg-teal-700 transition-colors whitespace-nowrap cursor-pointer"
-                                >
-                                  <i className="ri-add-line mr-1"></i>추가
-                                </button>
-                              </div>
-                            </div>
-                            
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">최대 예약 수</label>
-                              <input
-                                type="number"
-                                value={schedule.maxBookings}
-                                onChange={(e) => handleWeeklyScheduleUpdate(day, 'maxBookings', parseInt(e.target.value))}
-                                className="border border-gray-300 rounded px-3 py-2 text-sm w-20"
-                                min="0"
-                                max="20"
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
               </div>
             )}
 
             {activeTab === 'hotel' && (
               <div className="space-y-6">
-                <h3 className="text-xl font-bold text-gray-900">호텔 예약 현황</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-bold text-gray-900">호텔</h3>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                    <span className="text-sm text-gray-600">실시간 업데이트</span>
+                  </div>
+                </div>
                 
-                <div className="grid md:grid-cols-3 gap-6">
+                <div className="grid md:grid-cols-4 gap-6">
                   <div className="bg-blue-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">현재 투숙</h4>
+                      <h4 className="font-semibold text-gray-900">오늘 체크인</h4>
                       <span className="text-2xl font-bold text-blue-600">
-                        {hotelReservations.filter(r => r.status === 'confirmed' && 
-                          new Date(r.checkIn || r.date) <= new Date() && 
-                          new Date(r.checkOut || r.date) >= new Date()).length}
+                        {hotelReservations.filter(r => r.checkIn === new Date().toISOString().split('T')[0]).length}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600">현재 투숙 중인 반려동물</p>
+                    <p className="text-sm text-gray-600">신규 입실</p>
+                  </div>
+                  
+                  <div className="bg-purple-50 rounded-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-semibold text-gray-900">현재 투숙</h4>
+                      <span className="text-2xl font-bold text-purple-600">
+                        {hotelReservations.filter(r => r.status === 'confirmed').length}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600">투숙 중</p>
                   </div>
                   
                   <div className="bg-green-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">이번 주</h4>
-                      <span className="text-2xl font-bold text-green-600">{hotelReservations.length}</span>
-                    </div>
-                    <p className="text-sm text-gray-600">전체 호텔 예약</p>
-                  </div>
-                  
-                  <div className="bg-yellow-50 rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">대기 중</h4>
-                      <span className="text-2xl font-bold text-yellow-600">
-                        {hotelReservations.filter(r => r.status === 'pending').length}
+                      <h4 className="font-semibold text-gray-900">오늘 체크아웃</h4>
+                      <span className="text-2xl font-bold text-green-600">
+                        {hotelReservations.filter(r => r.checkOut === new Date().toISOString().split('T')[0]).length}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600">확정 대기 예약</p>
+                    <p className="text-sm text-gray-600">퇴실 예정</p>
+                  </div>
+                  
+                  <div className="bg-orange-50 rounded-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-semibold text-gray-900">총 예약</h4>
+                      <span className="text-2xl font-bold text-orange-600">{hotelReservations.length}</span>
+                    </div>
+                    <p className="text-sm text-gray-600">이번 주 전체</p>
                   </div>
                 </div>
 
                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-200">
-                    <h4 className="font-semibold text-gray-900">호텔 예약 목록</h4>
+                    <h4 className="font-semibold text-gray-900">호텔 예약 현황</h4>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
@@ -761,18 +1016,21 @@ export default function AdminDashboard() {
                         <tr>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반려동물</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">보호자</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">객실 타입</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">체크인/체크아웃</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">룸타입</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">체크인</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">체크아웃</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상태</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">연락처</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">관리</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {hotelReservations.map((reservation) => (
                           <tr key={reservation.id} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {reservation.petName}
+                              <div className="flex items-center">
+                                <i className="ri-hotel-line mr-2 text-blue-500"></i>
+                                {reservation.petName}
+                              </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {reservation.ownerName}
@@ -781,7 +1039,10 @@ export default function AdminDashboard() {
                               {reservation.roomType || '일반룸'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {reservation.checkIn} ~ {reservation.checkOut}
+                              {reservation.checkIn || reservation.date}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {reservation.checkOut || '미정'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(reservation.status)}`}>
@@ -791,31 +1052,9 @@ export default function AdminDashboard() {
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {reservation.phone}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                              {reservation.status === 'pending' && (
-                                <button
-                                  onClick={() => handleStatusChange(reservation.id, 'confirmed')}
-                                  className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700 transition-colors whitespace-nowrap cursor-pointer mr-2"
-                                >
-                                  <i className="ri-check-line mr-1"></i>확정
-                                </button>
-                              )}
-                              {reservation.status === 'confirmed' && (
-                                <button
-                                  onClick={() => handleStatusChange(reservation.id, 'completed')}
-                                  className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 transition-colors whitespace-nowrap cursor-pointer mr-2"
-                                >
-                                  <i className="ri-check-double-line mr-1"></i>완료
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handleStatusChange(reservation.id, 'cancelled')}
-                                className="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700 transition-colors whitespace-nowrap cursor-pointer"
-                              >
-                                <i className="ri-close-line mr-1"></i>취소
-                              </button>
+                              <a href={`tel:${reservation.phone}`} className="text-teal-600 hover:text-teal-800 cursor-pointer">
+                                {reservation.phone}
+                              </a>
                             </td>
                           </tr>
                         ))}
@@ -828,65 +1067,87 @@ export default function AdminDashboard() {
 
             {activeTab === 'daycare' && (
               <div className="space-y-6">
-                <h3 className="text-xl font-bold text-gray-900">데이케어 현황</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-bold text-gray-900">데이케어</h3>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
+                    <span className="text-sm text-gray-600">실시간 업데이트</span>
+                  </div>
+                </div>
                 
-                <div className="grid md:grid-cols-3 gap-6">
+                <div className="grid md:grid-cols-4 gap-6">
                   <div className="bg-orange-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">오늘 데이케어</h4>
+                      <h4 className="font-semibold text-gray-900">오늘 등원</h4>
                       <span className="text-2xl font-bold text-orange-600">
                         {daycareReservations.filter(r => r.date === new Date().toISOString().split('T')[0]).length}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600">오늘 이용 중인 반려동물</p>
+                    <p className="text-sm text-gray-600">오늘 데이케어</p>
                   </div>
                   
-                  <div className="bg-teal-50 rounded-lg p-6">
+                  <div className="bg-green-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">이번 주</h4>
-                      <span className="text-2xl font-bold text-teal-600">{daycareReservations.length}</span>
-                    </div>
-                    <p className="text-sm text-gray-600">전체 데이케어 예약</p>
-                  </div>
-                  
-                  <div className="bg-red-50 rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">대기 중</h4>
-                      <span className="text-2xl font-bold text-red-600">
-                        {daycareReservations.filter(r => r.status === 'pending').length}
+                      <h4 className="font-semibold text-gray-900">현재 돌봄</h4>
+                      <span className="text-2xl font-bold text-green-600">
+                        {daycareReservations.filter(r => r.status === 'confirmed').length}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600">확정 대기 예약</p>
+                    <p className="text-sm text-gray-600">돌봄 중</p>
+                  </div>
+                  
+                  <div className="bg-blue-50 rounded-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-semibold text-gray-900">완료</h4>
+                      <span className="text-2xl font-bold text-blue-600">
+                        {daycareReservations.filter(r => r.status === 'completed').length}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600">오늘 완료</p>
+                  </div>
+                  
+                  <div className="bg-purple-50 rounded-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-semibold text-gray-900">총 예약</h4>
+                      <span className="text-2xl font-bold text-purple-600">{daycareReservations.length}</span>
+                    </div>
+                    <p className="text-sm text-gray-600">이번 주 전체</p>
                   </div>
                 </div>
 
                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-200">
-                    <h4 className="font-semibold text-gray-900">데이케어 예약 목록</h4>
+                    <h4 className="font-semibold text-gray-900">데이케어 예약 현황</h4>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">시간</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">반려동물</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">보호자</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">날짜/시간</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">날짜</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상태</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">연락처</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">관리</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {daycareReservations.map((reservation) => (
                           <tr key={reservation.id} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {reservation.petName}
+                              {reservation.time}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              <div className="flex items-center">
+                                <i className="ri-home-heart-line mr-2 text-orange-500"></i>
+                                {reservation.petName}
+                              </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               {reservation.ownerName}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {reservation.date} {reservation.time}
+                              {reservation.date}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(reservation.status)}`}>
@@ -896,31 +1157,9 @@ export default function AdminDashboard() {
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {reservation.phone}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                              {reservation.status === 'pending' && (
-                                <button
-                                  onClick={() => handleStatusChange(reservation.id, 'confirmed')}
-                                  className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700 transition-colors whitespace-nowrap cursor-pointer mr-2"
-                                >
-                                  <i className="ri-check-line mr-1"></i>확정
-                                </button>
-                              )}
-                              {reservation.status === 'confirmed' && (
-                                <button
-                                  onClick={() => handleStatusChange(reservation.id, 'completed')}
-                                  className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 transition-colors whitespace-nowrap cursor-pointer mr-2"
-                                >
-                                  <i className="ri-check-double-line mr-1"></i>완료
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handleStatusChange(reservation.id, 'cancelled')}
-                                className="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700 transition-colors whitespace-nowrap cursor-pointer"
-                              >
-                                <i className="ri-close-line mr-1"></i>취소
-                              </button>
+                              <a href={`tel:${reservation.phone}`} className="text-teal-600 hover:text-teal-800 cursor-pointer">
+                                {reservation.phone}
+                              </a>
                             </td>
                           </tr>
                         ))}
@@ -931,188 +1170,156 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            {activeTab === 'settings' && (
+            {activeTab === 'account' && (
               <div className="space-y-6">
-                <h3 className="text-xl font-bold text-gray-900">시스템 설정</h3>
+                <h3 className="text-xl font-bold text-gray-900">계정 관리</h3>
                 
-                {/* 관리자 계정 관리 */}
-                <div className="bg-white rounded-lg border border-gray-200 p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="font-semibold text-gray-900">
-                      <i className="ri-user-settings-line mr-2"></i>관리자 계정 관리
-                    </h4>
-                    <button
-                      onClick={() => setIsEditingAccount(!isEditingAccount)}
-                      className="bg-teal-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-teal-700 transition-colors whitespace-nowrap cursor-pointer"
-                    >
-                      <i className="ri-edit-line mr-2"></i>
-                      {isEditingAccount ? '취소' : '수정'}
-                    </button>
-                  </div>
-                  
-                  {isEditingAccount ? (
-                    <div className="space-y-4">
-                      <div className="grid md:grid-cols-2 gap-4">
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <h4 className="font-semibold text-gray-900">
+                        <i className="ri-user-settings-line mr-2 text-teal-600"></i>관리자 계정 정보
+                      </h4>
+                      <button
+                        onClick={() => setIsEditingAccount(!isEditingAccount)}
+                        className="text-teal-600 hover:text-teal-800 cursor-pointer"
+                      >
+                        <i className="ri-edit-line mr-1"></i>
+                        {isEditingAccount ? '취소' : '수정'}
+                      </button>
+                    </div>
+                    
+                    {isEditingAccount ? (
+                      <div className="space-y-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">관리자 아이디</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">아이디</label>
                           <input
                             type="text"
                             value={adminAccount.username}
-                            onChange={(e) => setAdminAccount({...adminAccount, username: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-teal-500 focus:border-teal-500 text-sm"
+                            onChange={(e) => setAdminAccount((prev) => ({ ...prev, username: e.target.value }))}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">비밀번호</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">이메일</label>
                           <input
-                            type="password"
-                            value={adminAccount.password}
-                            onChange={(e) => setAdminAccount({...adminAccount, password: e.target.value})}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-teal-500 focus:border-teal-500 text-sm"
+                            type="email"
+                            value={adminAccount.email}
+                            onChange={(e) => setAdminAccount((prev) => ({ ...prev, email: e.target.value }))}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                           />
                         </div>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">이메일</label>
-                        <input
-                          type="email"
-                          value={adminAccount.email}
-                          onChange={(e) => setAdminAccount({...adminAccount, email: e.target.value})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-teal-500 focus:border-teal-500 text-sm"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">보안 질문</label>
-                        <select
-                          value={adminAccount.securityQuestion}
-                          onChange={(e) => setAdminAccount({...adminAccount, securityQuestion: e.target.value})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-teal-500 focus:border-teal-500 text-sm pr-8"
-                        >
-                          <option value="가장 좋아하는 반려동물의 이름은?">가장 좋아하는 반려동물의 이름은?</option>
-                          <option value="어머니의 성함은?">어머니의 성함은?</option>
-                          <option value="태어난 도시는?">태어난 도시는?</option>
-                          <option value="첫 번째 직장의 이름은?">첫 번째 직장의 이름은?</option>
-                          <option value="가장 좋아하는 음식은?">가장 좋아하는 음식은?</option>
-                        </select>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">보안 답변</label>
-                        <input
-                          type="text"
-                          value={adminAccount.securityAnswer}
-                          onChange={(e) => setAdminAccount({...adminAccount, securityAnswer: e.target.value})}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-teal-500 focus:border-teal-500 text-sm"
-                          placeholder="보안 질문에 대한 답변을 입력하세요"
-                        />
-                      </div>
-                      
-                      <div className="flex space-x-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">보안 질문</label>
+                          <input
+                            type="text"
+                            value={adminAccount.securityQuestion}
+                            onChange={(e) => setAdminAccount((prev) => ({ ...prev, securityQuestion: e.target.value }))}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">보안 답변</label>
+                          <input
+                            type="text"
+                            value={adminAccount.securityAnswer || ''}
+                            onChange={(e) => setAdminAccount((prev) => ({ ...prev, securityAnswer: e.target.value }))}
+                            placeholder="새로운 보안 답변을 입력하세요"
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">새로운 답변만 저장되며 입력하지 않으면 기존 값이 유지됩니다.</p>
+                        </div>
                         <button
                           onClick={handleAccountUpdate}
-                          className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors whitespace-nowrap cursor-pointer"
+                          disabled={accountSaving}
+                          className="w-full bg-teal-600 text-white py-2 rounded-lg font-semibold hover:bg-teal-700 transition-colors whitespace-nowrap cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                          <i className="ri-save-line mr-2"></i>저장
-                        </button>
-                        <button
-                          onClick={() => setIsEditingAccount(false)}
-                          className="bg-gray-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-700 transition-colors whitespace-nowrap cursor-pointer"
-                        >
-                          <i className="ri-close-line mr-2"></i>취소
+                          <i className="ri-save-line mr-2"></i>{accountSaving ? '저장 중...' : '저장'}
                         </button>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="grid md:grid-cols-2 gap-4">
+                    ) : (
+                      <div className="space-y-3 text-sm">
                         <div>
-                          <span className="text-sm text-gray-600">관리자 아이디:</span>
-                          <p className="font-medium">{adminAccount.username}</p>
+                          <span className="font-medium text-gray-700">아이디</span>
+                          <span className="ml-2 text-gray-600">{adminAccount.username}</span>
                         </div>
                         <div>
-                          <span className="text-sm text-gray-600">비밀번호:</span>
-                          <p className="font-medium">••••••••••</p>
+                          <span className="font-medium text-gray-700">비밀번호</span>
+                          <span className="ml-2 text-gray-600">Supabase Auth로 암호화되어 관리됩니다.</span>
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-700">이메일</span>
+                          <span className="ml-2 text-gray-600">{adminAccount.email}</span>
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-700">보안 질문</span>
+                          <span className="ml-2 text-gray-600">{adminAccount.securityQuestion}</span>
                         </div>
                       </div>
-                      <div>
-                        <span className="text-sm text-gray-600">이메일:</span>
-                        <p className="font-medium">{adminAccount.email}</p>
-                      </div>
-                      <div>
-                        <span className="text-sm text-gray-600">보안 질문:</span>
-                        <p className="font-medium">{adminAccount.securityQuestion}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* 캘린더 설정 */}
-                <div className="bg-white rounded-lg border border-gray-200 p-6">
-                  <h4 className="font-semibold text-gray-900 mb-4">
-                    <i className="ri-calendar-line mr-2"></i>캘린더 설정
-                  </h4>
+                    )}
+                  </div>
                   
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <div>
-                        <h5 className="font-medium text-gray-900">AI 상담 캘린더 연동</h5>
-                        <p className="text-sm text-gray-600">AI 챗봇이 24시간 예약 문의를 받을 수 있습니다</p>
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <h4 className="font-semibold text-gray-900 mb-4">
+                      <i className="ri-shield-check-line mr-2 text-green-600"></i>보안 설정
+                    </h4>
+                    <div className="space-y-4">
+                      <div className="bg-green-50 rounded-lg p-4">
+                        <h5 className="font-medium text-green-800 mb-2">계정 보안 상태</h5>
+                        <div className="space-y-2 text-sm text-green-700">
+                          <div className="flex items-center">
+                            <i className="ri-check-line mr-2"></i>
+                            <span>비밀번호 암호화 저장</span>
+                          </div>
+                          <div className="flex items-center">
+                            <i className="ri-check-line mr-2"></i>
+                            <span>보안 질문 등록 완료</span>
+                          </div>
+                          <div className="flex items-center">
+                            <i className="ri-check-line mr-2"></i>
+                            <span>이메일 인증 완료</span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center space-x-3">
-                        <span className={`text-sm font-medium ${calendarSettings.isEnabled ? 'text-green-600' : 'text-gray-500'}`}>
-                          {calendarSettings.isEnabled ? '활성화됨' : '비활성화됨'}
-                        </span>
+                      
+                      <div className="bg-yellow-50 rounded-lg p-4">
+                        <h5 className="font-medium text-yellow-800 mb-2">
+                          <i className="ri-information-line mr-2"></i>비밀번호 찾기 안내
+                        </h5>
+                        <p className="text-sm text-yellow-700 mb-3">
+                          보안 질문을 통과하면 등록된 이메일로 Supabase 비밀번호 재설정 링크가 자동 전송됩니다.
+                        </p>
+                        <a href="/admin" className="text-yellow-800 hover:text-yellow-900 text-sm font-medium cursor-pointer">
+                          <i className="ri-arrow-right-line mr-1"></i>로그인 페이지로 이동
+                        </a>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 border-t border-gray-100 pt-4">
+                      <h5 className="font-medium text-gray-900 mb-3">비밀번호 변경</h5>
+                      <div className="space-y-3">
+                        <input
+                          type="password"
+                          value={passwordForm.newPassword}
+                          onChange={(e) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                          placeholder="새 비밀번호 (최소 8자)"
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        />
+                        <input
+                          type="password"
+                          value={passwordForm.confirmPassword}
+                          onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                          placeholder="비밀번호 확인"
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                        />
                         <button
-                          onClick={handleCalendarSetup}
-                          className="bg-teal-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-teal-700 transition-colors whitespace-nowrap cursor-pointer"
+                          onClick={handlePasswordChange}
+                          disabled={passwordSaving}
+                          className="w-full bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors whitespace-nowrap cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                          <i className="ri-settings-line mr-2"></i>설정
+                          <i className="ri-lock-password-line mr-2"></i>{passwordSaving ? '변경 중...' : '비밀번호 변경'}
                         </button>
                       </div>
-                    </div>
-                    
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">운영 시작 시간</label>
-                        <input
-                          type="time"
-                          value={calendarSettings.businessHours.start}
-                          onChange={(e) => setCalendarSettings({
-                            ...calendarSettings,
-                            businessHours: { ...calendarSettings.businessHours, start: e.target.value }
-                          })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-teal-500 focus:border-teal-500 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">운영 종료 시간</label>
-                        <input
-                          type="time"
-                          value={calendarSettings.businessHours.end}
-                          onChange={(e) => setCalendarSettings({
-                            ...calendarSettings,
-                            businessHours: { ...calendarSettings.businessHours, end: e.target.value }
-                          })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-teal-500 focus:border-teal-500 text-sm"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">일일 최대 예약 수</label>
-                      <input
-                        type="number"
-                        value={calendarSettings.maxBookingsPerDay}
-                        onChange={(e) => setCalendarSettings({
-                          ...calendarSettings,
-                          maxBookingsPerDay: parseInt(e.target.value)
-                        })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-teal-500 focus:border-teal-500 text-sm"
-                        min="1"
-                        max="50"
-                      />
                     </div>
                   </div>
                 </div>

@@ -3,18 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { adminService } from '../../lib/supabase';
 
 export default function AdminPage() {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [securityQuestion, setSecurityQuestion] = useState('');
   const [securityAnswer, setSecurityAnswer] = useState('');
-  const [recoveryStep, setRecoveryStep] = useState(1);
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [recoveryStep, setRecoveryStep] = useState<1 | 2 | 3>(1);
   const [loading, setLoading] = useState(false);
-  const [recoveryUsername, setRecoveryUsername] = useState('');
+  const [recoveryEmail, setRecoveryEmail] = useState('');
   const navigate = useNavigate();
+
+  const getRecoveryTargetEmail = () => (recoveryEmail || email).trim();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,15 +22,14 @@ export default function AdminPage() {
     setLoading(true);
 
     try {
-      const admin = await adminService.login(username, password);
-      
-      if (admin) {
-        localStorage.setItem('isAdminLoggedIn', 'true');
-        localStorage.setItem('adminUsername', username);
+      const user = await adminService.login(email, password);
+      if (user) {
+        localStorage.setItem('adminAuth', 'true');
+        localStorage.setItem('adminEmail', email);
         navigate('/admin/dashboard');
       }
     } catch (err: any) {
-      setError('아이디 또는 비밀번호가 올바르지 않습니다.');
+      setError('이메일 또는 비밀번호가 올바르지 않습니다.');
     } finally {
       setLoading(false);
     }
@@ -39,62 +38,57 @@ export default function AdminPage() {
   const handleForgotPassword = () => {
     setShowForgotPassword(true);
     setRecoveryStep(1);
+    setSecurityQuestion('');
+    setSecurityAnswer('');
+    setRecoveryEmail('');
     setError('');
   };
 
-  const handleSecurityAnswer = async (e: React.FormEvent) => {
+  const handleSecurityLookup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
+    const targetEmail = getRecoveryTargetEmail();
 
+    if (!targetEmail) {
+      setError('관리자 이메일을 입력해주세요.');
+      return;
+    }
+
+    setLoading(true);
     try {
-      const admin = await adminService.verifySecurityAnswer(
-        recoveryUsername || username || 'admin',
-        securityAnswer
-      );
-      
-      if (admin) {
-        setSecurityQuestion(admin.security_question);
-        setRecoveryStep(2);
-      }
+      const question = await adminService.getSecurityQuestion(targetEmail);
+      setSecurityQuestion(question);
+      setRecoveryStep(2);
     } catch (err: any) {
-      setError('보안 답변이 올바르지 않습니다.');
+      setError('등록된 계정을 찾을 수 없습니다.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handlePasswordReset = async (e: React.FormEvent) => {
+  const handleSecurityAnswer = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    const targetEmail = getRecoveryTargetEmail();
 
-    if (newPassword.length < 6) {
-      setError('비밀번호는 최소 6자 이상이어야 합니다.');
+    if (!targetEmail) {
+      setError('관리자 이메일을 입력해주세요.');
       return;
     }
 
-    if (newPassword !== confirmPassword) {
-      setError('비밀번호가 일치하지 않습니다.');
+    if (!securityAnswer.trim()) {
+      setError('보안 질문 답변을 입력해주세요.');
       return;
     }
 
     setLoading(true);
-
     try {
-      await adminService.resetPassword(
-        recoveryUsername || username || 'admin',
-        newPassword
-      );
-
-      alert('비밀번호가 성공적으로 변경되었습니다.');
-      setShowForgotPassword(false);
-      setRecoveryStep(1);
+      await adminService.verifySecurityAnswer(targetEmail, securityAnswer);
+      await adminService.triggerPasswordReset(targetEmail);
       setSecurityAnswer('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setRecoveryUsername('');
+      setRecoveryStep(3);
     } catch (err: any) {
-      setError('비밀번호 변경에 실패했습니다.');
+      setError('보안 답변이 일치하지 않습니다.');
     } finally {
       setLoading(false);
     }
@@ -103,11 +97,10 @@ export default function AdminPage() {
   const handleBackToLogin = () => {
     setShowForgotPassword(false);
     setRecoveryStep(1);
-    setError('');
+    setSecurityQuestion('');
     setSecurityAnswer('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setRecoveryUsername('');
+    setRecoveryEmail('');
+    setError('');
   };
 
   return (
@@ -118,21 +111,21 @@ export default function AdminPage() {
             <i className="ri-shield-user-line text-2xl text-white"></i>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">관리자 로그인</h1>
-          <p className="text-gray-600 mt-2">펫호텔 관리 시스템</p>
+          <p className="text-gray-600 mt-2">보호자 관리 시스템</p>
         </div>
 
         {!showForgotPassword ? (
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                <i className="ri-user-line mr-2"></i>관리자 아이디
+                <i className="ri-mail-line mr-2"></i>관리자 이메일
               </label>
               <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-                placeholder="아이디를 입력하세요"
+                placeholder="이메일을 입력하세요"
                 required
                 disabled={loading}
               />
@@ -168,9 +161,13 @@ export default function AdminPage() {
               className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700 transition-colors disabled:opacity-50"
             >
               {loading ? (
-                <><i className="ri-loader-4-line mr-2 animate-spin"></i>로그인 중...</>
+                <>
+                  <i className="ri-loader-4-line mr-2 animate-spin"></i>로그인 중...
+                </>
               ) : (
-                <><i className="ri-login-box-line mr-2"></i>로그인</>
+                <>
+                  <i className="ri-login-box-line mr-2"></i>로그인
+                </>
               )}
             </button>
 
@@ -181,7 +178,7 @@ export default function AdminPage() {
                 className="text-teal-600 hover:text-teal-700 text-sm font-medium"
                 disabled={loading}
               >
-                <i className="ri-question-line mr-1"></i>아이디/비밀번호를 잊으셨나요?
+                <i className="ri-question-line mr-1"></i>비밀번호를 잊으셨나요?
               </button>
             </div>
           </form>
@@ -190,39 +187,19 @@ export default function AdminPage() {
             {recoveryStep === 1 && (
               <div>
                 <div className="text-center mb-6">
-                  <h2 className="text-xl font-bold text-gray-900 mb-2">계정 찾기</h2>
-                  <p className="text-gray-600 text-sm">아이디와 보안 질문에 답변해 주세요</p>
+                  <h2 className="text-xl font-bold text-gray-900 mb-2">계정 확인</h2>
+                  <p className="text-gray-600 text-sm">등록된 관리자 이메일을 입력하면 보안 질문을 안내해 드립니다.</p>
                 </div>
 
-                <form onSubmit={handleSecurityAnswer} className="space-y-4">
+                <form onSubmit={handleSecurityLookup} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">아이디</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">이메일</label>
                     <input
-                      type="text"
-                      value={recoveryUsername}
-                      onChange={(e) => setRecoveryUsername(e.target.value)}
+                      type="email"
+                      value={recoveryEmail || email}
+                      onChange={(e) => setRecoveryEmail(e.target.value)}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-                      placeholder="아이디를 입력하세요"
-                      required
-                      disabled={loading}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">보안 질문</label>
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                      <p className="text-gray-800">가장 좋아하는 반려동물의 이름은?</p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">답변</label>
-                    <input
-                      type="text"
-                      value={securityAnswer}
-                      onChange={(e) => setSecurityAnswer(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-                      placeholder="보안 질문에 대한 답변을 입력하세요"
+                      placeholder="관리자 이메일을 입력하세요"
                       required
                       disabled={loading}
                     />
@@ -242,7 +219,7 @@ export default function AdminPage() {
                     disabled={loading}
                     className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700 transition-colors disabled:opacity-50"
                   >
-                    {loading ? '확인 중...' : '확인'}
+                    {loading ? '확인 중...' : '보안 질문 확인'}
                   </button>
                 </form>
               </div>
@@ -251,36 +228,26 @@ export default function AdminPage() {
             {recoveryStep === 2 && (
               <div>
                 <div className="text-center mb-6">
-                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <i className="ri-check-line text-xl text-green-600"></i>
-                  </div>
-                  <h2 className="text-xl font-bold text-gray-900 mb-2">새 비밀번호 설정</h2>
-                  <p className="text-gray-600 text-sm">새로운 비밀번호를 입력해 주세요</p>
+                  <h2 className="text-xl font-bold text-gray-900 mb-2">보안 질문</h2>
+                  <p className="text-gray-600 text-sm">등록된 답변을 입력해 주세요. 일치하면 비밀번호 재설정 메일을 보내드립니다.</p>
                 </div>
 
-                <form onSubmit={handlePasswordReset} className="space-y-4">
+                <form onSubmit={handleSecurityAnswer} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">새 비밀번호</label>
-                    <input
-                      type="password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-                      placeholder="새 비밀번호를 입력하세요 (최소 6자)"
-                      required
-                      minLength={6}
-                      disabled={loading}
-                    />
+                    <label className="block text-sm font-medium text-gray-700 mb-2">질문</label>
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <p className="text-gray-800">{securityQuestion || '등록된 보안 질문이 없습니다.'}</p>
+                    </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">비밀번호 확인</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">답변</label>
                     <input
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      type="text"
+                      value={securityAnswer}
+                      onChange={(e) => setSecurityAnswer(e.target.value)}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-                      placeholder="비밀번호를 다시 입력하세요"
+                      placeholder="보안 질문 답변을 입력하세요"
                       required
                       disabled={loading}
                     />
@@ -298,11 +265,21 @@ export default function AdminPage() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors disabled:opacity-50"
+                    className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700 transition-colors disabled:opacity-50"
                   >
-                    <i className="ri-save-line mr-2"></i>{loading ? '변경 중...' : '비밀번호 변경'}
+                    {loading ? '확인 중...' : '답변 제출'}
                   </button>
                 </form>
+              </div>
+            )}
+
+            {recoveryStep === 3 && (
+              <div className="text-center space-y-4">
+                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+                  <i className="ri-mail-send-line text-xl text-green-600"></i>
+                </div>
+                <h2 className="text-xl font-bold text-gray-900">재설정 메일을 전송했습니다.</h2>
+                <p className="text-gray-600 text-sm">이메일의 안내를 따라 새 비밀번호를 설정해 주세요.</p>
               </div>
             )}
 
@@ -320,7 +297,7 @@ export default function AdminPage() {
 
         <div className="mt-8 pt-6 border-t border-gray-200">
           <div className="text-center text-xs text-gray-500">
-            <p>© 2024 펫호텔 관리 시스템. All rights reserved.</p>
+            <p>© 2024 보호자 관리 시스템 All rights reserved.</p>
             <p className="mt-1">보안 문의: admin@pethotel.com</p>
           </div>
         </div>
@@ -328,3 +305,4 @@ export default function AdminPage() {
     </div>
   );
 }
+

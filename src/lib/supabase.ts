@@ -1,4 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type Session } from '@supabase/supabase-js';
+import { hashSecurityAnswer } from '../utils/security';
 
 const supabaseUrl = import.meta.env.VITE_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY;
@@ -19,7 +20,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
-// 예약 관련 타입 정의
 export interface Reservation {
   id: string;
   pet_name: string;
@@ -39,7 +39,44 @@ export interface Reservation {
   updated_at: string;
 }
 
-// 예약 서비스 함수들
+export interface CalendarSettingsRecord {
+  id?: string;
+  is_enabled: boolean;
+  business_hours: { start: string; end: string };
+  available_days: string[];
+  max_bookings_per_day: number;
+  updated_at?: string;
+}
+
+export interface WeeklyGroomingScheduleRecord {
+  id?: string;
+  day_of_week: string;
+  is_open: boolean;
+  time_slots: string[];
+  max_bookings: number;
+  updated_at?: string;
+}
+
+export interface AdminProfile {
+  id?: string;
+  user_id: string;
+  username?: string;
+  email?: string;
+  security_question?: string;
+  security_answer_hash?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface AdminProfileInput {
+  id?: string;
+  user_id: string;
+  username?: string;
+  email?: string;
+  security_question?: string;
+  security_answer?: string;
+}
+
 export const reservationService = {
   async getAll() {
     const { data, error } = await supabase
@@ -80,71 +117,207 @@ export const reservationService = {
     return data as Reservation;
   },
   
-  // 실시간 구독
   subscribeToChanges(callback: (payload: any) => void) {
     return supabase
       .channel('reservations')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'reservations' }, 
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'reservations' },
         callback
       )
       .subscribe();
   }
 };
 
-// 관리자 인증 함수들
+export const calendarSettingsService = {
+  async getLatest(): Promise<CalendarSettingsRecord | null> {
+    const { data, error } = await supabase
+      .from('calendar_settings')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data as CalendarSettingsRecord | null;
+  },
+
+  async upsert(settings: CalendarSettingsRecord) {
+    const payload = {
+      id: settings.id,
+      is_enabled: settings.is_enabled,
+      business_hours: settings.business_hours,
+      available_days: settings.available_days,
+      max_bookings_per_day: settings.max_bookings_per_day
+    };
+
+    const { data, error } = await supabase
+      .from('calendar_settings')
+      .upsert(payload, { onConflict: 'id' })
+      .select()
+      .single();
+    if (error) throw error;
+    return data as CalendarSettingsRecord;
+  }
+};
+
+export const weeklyGroomingScheduleService = {
+  async getAll(): Promise<WeeklyGroomingScheduleRecord[]> {
+    const { data, error } = await supabase
+      .from('weekly_grooming_schedule')
+      .select('*');
+    if (error) throw error;
+    return data as WeeklyGroomingScheduleRecord[];
+  },
+
+  async getByDay(day: string) {
+    const { data, error } = await supabase
+      .from('weekly_grooming_schedule')
+      .select('*')
+      .eq('day_of_week', day)
+      .maybeSingle();
+    if (error) throw error;
+    return data as WeeklyGroomingScheduleRecord | null;
+  },
+
+  async upsert(entries: WeeklyGroomingScheduleRecord[]) {
+    const payload = entries.map((entry) => ({
+      id: entry.id,
+      day_of_week: entry.day_of_week,
+      is_open: entry.is_open,
+      time_slots: entry.time_slots,
+      max_bookings: entry.max_bookings
+    }));
+
+    const { data, error } = await supabase
+      .from('weekly_grooming_schedule')
+      .upsert(payload, { onConflict: 'day_of_week' })
+      .select();
+    if (error) throw error;
+    return data as WeeklyGroomingScheduleRecord[];
+  }
+};
+
+export const adminProfileService = {
+  async getByUserId(userId: string) {
+    const { data, error } = await supabase
+      .from('admin_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) throw error;
+    return data as AdminProfile | null;
+  },
+
+  async getByEmail(email: string) {
+    const normalized = email.toLowerCase();
+    const { data, error } = await supabase
+      .from('admin_profiles')
+      .select('*')
+      .eq('email', normalized)
+      .maybeSingle();
+    if (error) throw error;
+    return data as AdminProfile | null;
+  },
+
+  async upsert(profile: AdminProfileInput) {
+    const payload: Record<string, any> = {
+      id: profile.id,
+      user_id: profile.user_id,
+      username: profile.username,
+      email: profile.email?.toLowerCase(),
+      security_question: profile.security_question
+    };
+
+    if (profile.security_answer) {
+      payload.security_answer_hash = await hashSecurityAnswer(profile.security_answer);
+    }
+
+    const { data, error } = await supabase
+      .from('admin_profiles')
+      .upsert(payload, { onConflict: 'user_id' })
+      .select()
+      .single();
+    if (error) throw error;
+    return data as AdminProfile;
+  },
+
+  async verifySecurityAnswer(email: string, answer: string) {
+    const profile = await adminProfileService.getByEmail(email);
+    if (!profile?.security_answer_hash) {
+      throw new Error('등록된 보안 정보가 없습니다.');
+    }
+
+    const hashed = await hashSecurityAnswer(answer);
+    if (hashed !== profile.security_answer_hash) {
+      throw new Error('보안 답변이 일치하지 않습니다.');
+    }
+
+    return profile;
+  }
+};
+
 export const adminService = {
-  async login(username: string, password: string) {
-    const { data, error } = await supabase
-      .from('admin_users')
-      .select('*')
-      .eq('username', username)
-      .eq('password_hash', password)
-      .single();
+  async login(email: string, password: string) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
     if (error) throw error;
-    return data;
+    return data.user;
   },
-  
-  async verifySecurityAnswer(username: string, answer: string) {
-    const { data, error } = await supabase
-      .from('admin_users')
-      .select('*')
-      .eq('username', username)
-      .eq('security_answer_hash', answer.toLowerCase().trim())
-      .single();
+
+  async logout() {
+    const { error } = await supabase.auth.signOut();
     if (error) throw error;
-    return data;
   },
-  
-  async resetPassword(username: string, newPassword: string) {
-    const { data, error } = await supabase
-      .from('admin_users')
-      .update({ password_hash: newPassword })
-      .eq('username', username)
-      .select()
-      .single();
+
+  async getSession(): Promise<Session | null> {
+    const { data, error } = await supabase.auth.getSession();
     if (error) throw error;
-    return data;
+    return data.session;
   },
-  
-  async updateAccount(username: string, updates: Partial<{
-    password_hash: string;
-    email: string;
-    security_question: string;
-    security_answer_hash: string;
-  }>) {
-    const { data, error } = await supabase
-      .from('admin_users')
-      .update(updates)
-      .eq('username', username)
-      .select()
-      .single();
+
+  onAuthStateChange(callback: (session: Session | null) => void) {
+    return supabase.auth.onAuthStateChange((_event, session) => callback(session));
+  },
+
+  async updateEmail(email: string) {
+    const { data, error } = await supabase.auth.updateUser({ email });
+    if (error) throw error;
+    return data.user;
+  },
+
+  async updatePassword(newPassword: string) {
+    const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+    return data.user;
+  },
+
+  async getSecurityQuestion(email: string) {
+    const profile = await adminProfileService.getByEmail(email);
+    if (!profile?.security_question) {
+      throw new Error('등록된 보안 질문이 없습니다.');
+    }
+    return profile.security_question;
+  },
+
+  async verifySecurityAnswer(email: string, answer: string) {
+    return adminProfileService.verifySecurityAnswer(email, answer);
+  },
+
+  async triggerPasswordReset(email: string) {
+    const redirectTo = typeof window !== 'undefined'
+      ? `${window.location.origin}/admin`
+      : undefined;
+
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo
+    });
     if (error) throw error;
     return data;
   }
 };
 
-// 설정 관련 함수들
 export const settingsService = {
   async get(key: string) {
     const { data, error } = await supabase
@@ -170,10 +343,9 @@ export const settingsService = {
   }
 };
 
-// SMS 발송 서비스
 export const smsService = {
   async sendConfirmation(reservation: Reservation) {
-    const message = `[PuppyHotel] ${reservation.owner_name}님, ${reservation.pet_name}의 ${
+    const message = `[PuppyHotel] ${reservation.owner_name}님 ${reservation.pet_name}님 ${
       reservation.service === 'grooming' ? '미용' : 
       reservation.service === 'hotel' ? '호텔' : '데이케어'
     } 예약이 확정되었습니다. 날짜: ${reservation.reservation_date} ${reservation.reservation_time || ''}. 문의: 02-1234-5678`;
@@ -187,7 +359,7 @@ export const smsService = {
         },
         body: JSON.stringify({
           to: reservation.phone,
-          message: message,
+          message,
           reservationId: reservation.id
         })
       });
@@ -201,7 +373,6 @@ export const smsService = {
   }
 };
 
-// 챗봇용 예약 조회 API
 export const chatbotService = {
   async getAvailableSlots(date: string, service: string) {
     const { data: reservations, error } = await supabase
@@ -213,23 +384,16 @@ export const chatbotService = {
     
     if (error) throw error;
     
-    // 설정에서 가능한 시간대 가져오기
-    const settings = await settingsService.get('weekly_grooming_schedule');
-    const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'lowercase' });
+    const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    const schedule = await weeklyGroomingScheduleService.getByDay(dayOfWeek);
     
-    if (!settings || !settings[dayOfWeek]) {
+    if (!schedule || !schedule.is_open) {
       return [];
     }
     
-    const daySchedule = settings[dayOfWeek];
-    if (!daySchedule.isOpen) {
-      return [];
-    }
-    
-    // 예약된 시간 제외
     const bookedTimes = reservations?.map(r => r.reservation_time) || [];
-    const availableSlots = daySchedule.timeSlots.filter(
-      (slot: string) => !bookedTimes.includes(slot)
+    const availableSlots = schedule.time_slots.filter(
+      (slot: string) => slot && !bookedTimes.includes(slot)
     );
     
     return availableSlots;

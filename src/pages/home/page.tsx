@@ -4,6 +4,7 @@ import GroomingCalendar from '../../components/feature/GroomingCalendar';
 import HotelCalendar from '../../components/feature/HotelCalendar';
 import RealtimeReservationSync from '../../components/feature/RealtimeReservationSync';
 import ChatbotReservationAPI from '../../components/ChatbotReservationAPI';
+import { reservationService } from '../../lib/supabase';
 
 export default function HomePage() {
   const [activeService, setActiveService] = useState('hotel');
@@ -31,115 +32,77 @@ export default function HomePage() {
     ownerContact: ''
   });
 
-  const handleHotelSubmit = (e: React.FormEvent) => {
+  const handleHotelSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // 새 예약 데이터 생성
-    const newReservation = {
-      id: `hotel-${Date.now()}`,
-      petName: hotelForm.petName,
-      ownerName: '고객', // 실제로는 폼에서 받아야 함
-      breed: hotelForm.breed,
-      age: hotelForm.age,
-      weight: hotelForm.weight,
-      checkIn: hotelForm.checkIn,
-      checkOut: hotelForm.checkOut,
-      notes: hotelForm.notes,
-      phone: hotelForm.ownerContact,
-      status: 'pending',
-      roomType: getRoomTypeByWeight(hotelForm.weight),
-      service: 'hotel'
-    };
-
-    // 기존 예약 데이터 가져오기 (with error handling)
-    let existingReservations: any[] = [];
-    let existingAllReservations: any[] = [];
     try {
-      existingReservations = JSON.parse(localStorage.getItem('hotelReservations') || '[]');
-      existingAllReservations = JSON.parse(localStorage.getItem('allReservations') || '[]');
-    } catch (err) {
-      console.error('Failed to parse hotel reservations from localStorage', err);
+      // Supabase에 예약 저장
+      await reservationService.create({
+        pet_name: hotelForm.petName,
+        owner_name: '고객',
+        service: 'hotel',
+        reservation_date: hotelForm.checkIn,
+        status: 'pending',
+        phone: hotelForm.ownerContact,
+        room_type: getRoomTypeByWeight(hotelForm.weight),
+        check_in: hotelForm.checkIn,
+        check_out: hotelForm.checkOut,
+        special_notes: hotelForm.notes
+      });
+
+      // 폼 초기화
+      setHotelForm({
+        petName: '',
+        breed: '',
+        age: '',
+        weight: '',
+        checkIn: '',
+        checkOut: '',
+        notes: '',
+        ownerContact: ''
+      });
+
+      alert('호텔 예약 신청이 접수되었습니다. 관리자가 확인 후 연락드립니다.');
+    } catch (error) {
+      console.error('예약 실패:', error);
+      alert('예약 중 오류가 발생했습니다. 다시 시도해주세요.');
     }
-
-    // 새 예약 추가
-    existingReservations.push(newReservation);
-    existingAllReservations.push(newReservation);
-
-    // 로컬 스토리지에 저장
-    localStorage.setItem('hotelReservations', JSON.stringify(existingReservations));
-    localStorage.setItem('allReservations', JSON.stringify(existingAllReservations));
-
-    // 실시간 업데이트 이벤트 발생
-    window.dispatchEvent(new CustomEvent('reservationUpdated'));
-
-    // 폼 초기화
-    setHotelForm({
-      petName: '',
-      breed: '',
-      age: '',
-      weight: '',
-      checkIn: '',
-      checkOut: '',
-      notes: '',
-      ownerContact: ''
-    });
-
-    alert('호텔 예약 신청이 접수되었습니다. 관리자 대시보드와 달력에 실시간으로 반영됩니다.');
   };
 
-  const handleGroomingSubmit = (e: React.FormEvent) => {
+  const handleGroomingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // 새 예약 데이터 생성
-    const newReservation = {
-      id: `grooming-${Date.now()}`,
-      petName: groomingForm.petName,
-      ownerName: '고객', // 실제로는 폼에서 받아야 함
-      breed: groomingForm.breed,
-      age: groomingForm.age,
-      weight: groomingForm.weight,
-      date: groomingForm.date,
-      time: groomingForm.time,
-      style: groomingForm.style,
-      phone: groomingForm.ownerContact,
-      status: 'pending',
-      service: 'grooming'
-    };
-
-    // 기존 예약 데이터 가져오기 (with error handling)
-    let existingReservations: any[] = [];
-    let existingAllReservations: any[] = [];
     try {
-      existingReservations = JSON.parse(localStorage.getItem('groomingReservations') || '[]');
-      existingAllReservations = JSON.parse(localStorage.getItem('allReservations') || '[]');
-    } catch (err) {
-      console.error('Failed to parse grooming reservations from localStorage', err);
+      // Supabase에 예약 저장
+      await reservationService.create({
+        pet_name: groomingForm.petName,
+        owner_name: '고객',
+        service: 'grooming',
+        reservation_date: groomingForm.date,
+        reservation_time: groomingForm.time,
+        status: 'pending',
+        phone: groomingForm.ownerContact,
+        grooming_style: groomingForm.style,
+        special_notes: ''
+      });
+
+      // 폼 초기화
+      setGroomingForm({
+        petName: '',
+        breed: '',
+        age: '',
+        weight: '',
+        date: '',
+        time: '',
+        style: '',
+        ownerContact: ''
+      });
+
+      alert('미용 예약 신청이 접수되었습니다. 관리자가 확인 후 연락드립니다.');
+    } catch (error) {
+      console.error('예약 실패:', error);
+      alert('예약 중 오류가 발생했습니다. 다시 시도해주세요.');
     }
-
-    // 새 예약 추가
-    existingReservations.push(newReservation);
-    existingAllReservations.push(newReservation);
-
-    // 로컬 스토리지에 저장
-    localStorage.setItem('groomingReservations', JSON.stringify(existingReservations));
-    localStorage.setItem('allReservations', JSON.stringify(existingAllReservations));
-
-    // 실시간 업데이트 이벤트 발생
-    window.dispatchEvent(new CustomEvent('reservationUpdated'));
-
-    // 폼 초기화
-    setGroomingForm({
-      petName: '',
-      breed: '',
-      age: '',
-      weight: '',
-      date: '',
-      time: '',
-      style: '',
-      ownerContact: ''
-    });
-
-    alert('미용 예약 신청이 접수되었습니다. 관리자 대시보드와 달력에 실시간으로 반영됩니다.');
   };
 
   const getRoomTypeByWeight = (weight: string): 'small' | 'medium' | 'large' | 'cat' => {
@@ -1231,6 +1194,33 @@ export default function HomePage() {
 
         </div>
       </footer>
+
+      {/* 캘린더 모달 */}
+      {showCalendar && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
+              <h2 className="text-2xl font-bold text-gray-900">
+                {calendarType === 'all' && '전체 예약 현황'}
+                {calendarType === 'grooming' && '미용 예약 현황'}
+                {calendarType === 'hotel' && '호텔 예약 현황'}
+              </h2>
+              <button
+                onClick={() => setShowCalendar(false)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                <i className="ri-close-line"></i>
+              </button>
+            </div>
+            
+            <div className="p-6">
+              {calendarType === 'all' && <ReservationCalendar />}
+              {calendarType === 'grooming' && <GroomingCalendar />}
+              {calendarType === 'hotel' && <HotelCalendar />}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

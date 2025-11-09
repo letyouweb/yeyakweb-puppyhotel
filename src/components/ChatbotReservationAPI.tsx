@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { chatbotService, reservationService } from '../lib/supabase';
+import { setupChatbotReservationAPI } from '../lib/chatbotAPI';
 
 interface ReservationStatus {
   date: string;
@@ -16,6 +17,9 @@ export default function ChatbotReservationAPI() {
 
   // 챗봇이 호출할 수 있는 전역 함수 등록
   useEffect(() => {
+    // 예약 생성 API 등록
+    setupChatbotReservationAPI();
+    
     // 특정 날짜의 예약 가능 시간 조회
     (window as any).getAvailableSlots = async (date: string, service: string) => {
       try {

@@ -2,7 +2,7 @@
 // 이 컴포넌트를 홈페이지에 추가하면 챗봇이 예약 상황을 실시간으로 조회할 수 있습니다
 
 import { useEffect, useState } from 'react';
-import { chatbotService, reservationService } from '../lib/supabase';
+import { chatbotService } from '../lib/supabase';
 import { setupChatbotReservationAPI } from '../lib/chatbotAPI';
 
 interface ReservationStatus {
@@ -98,6 +98,9 @@ export const CHATBOT_RESERVATION_GUIDE = `
    
 2. 특정 날짜의 전체 예약 현황:
    window.getReservationStatus('2024-12-25')
+
+3. FAQ 조회:
+   window.getFAQs()
 
 응답 예시:
 {

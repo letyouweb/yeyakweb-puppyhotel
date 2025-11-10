@@ -1,7 +1,7 @@
 // AI 챗봇에서 예약을 Supabase에 저장하는 전역 함수
 // 홈페이지가 로드되면 자동으로 window 객체에 등록됩니다
 
-import { reservationService } from '../lib/supabase';
+import { reservationService, faqService } from '../lib/supabase';
 
 // 챗봇이 호출할 수 있는 예약 생성 함수
 export function setupChatbotReservationAPI() {
@@ -115,12 +115,39 @@ export function setupChatbotReservationAPI() {
     }
   };
 
+  // FAQ 조회 (챗봇이 자주 묻는 질문에 답변할 수 있도록)
+  (window as any).getFAQs = async () => {
+    try {
+      const faqs = await faqService.list();
+      const activeFaqs = faqs.filter(faq => faq.is_active);
+      
+      return {
+        success: true,
+        count: activeFaqs.length,
+        faqs: activeFaqs.map(faq => ({
+          question: faq.question,
+          answer: faq.answer,
+          tags: faq.tags || []
+        })),
+        message: `${activeFaqs.length}개의 FAQ를 찾았습니다.`
+      };
+    } catch (error) {
+      console.error('FAQ 조회 실패:', error);
+      return {
+        success: false,
+        error: 'FAQ를 불러오는 중 오류가 발생했습니다.',
+        faqs: []
+      };
+    }
+  };
+
   console.log('🤖 챗봇 예약 API 준비 완료!');
   console.log('사용 가능한 함수:', [
     'window.getAvailableSlots(date, service)',
     'window.getReservationStatus(date)',
     'window.createGroomingReservation(data)',
     'window.createHotelReservation(data)',
-    'window.createDaycareReservation(data)'
+    'window.createDaycareReservation(data)',
+    'window.getFAQs()'
   ]);
 }

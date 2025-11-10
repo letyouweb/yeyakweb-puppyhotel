@@ -1186,9 +1186,6 @@ export default function HomePage() {
                   관리자 로그인
                 </a>
               </p>
-              <a href="https://readdy.ai/?origin=logo" className="text-gray-400 hover:text-gray-300 transition-colors cursor-pointer text-sm">
-                Website Builder
-              </a>
             </div>
           </div>
 

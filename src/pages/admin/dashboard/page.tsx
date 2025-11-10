@@ -599,16 +599,6 @@ export default function AdminDashboard() {
               >
                 <i className="ri-user-settings-line mr-2"></i>계정 관리
               </button>
-              <button
-                onClick={() => setActiveTab('faq')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
-                  activeTab === 'faq'
-                    ? 'border-teal-500 text-teal-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <i className="ri-question-answer-line mr-2"></i>FAQ 관리
-              </button>
             </nav>
           </div>
 

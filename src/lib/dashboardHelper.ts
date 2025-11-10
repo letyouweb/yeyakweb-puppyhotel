@@ -1,5 +1,6 @@
 // 대시보드 Supabase 연동 헬퍼 파일
-import { reservationService, smsService } from './supabase';
+import { reservationService } from './supabase';
+import { simpleSMSService } from './simpleSMS';
 import type { Reservation } from './supabase';
 
 // Supabase 예약 데이터를 대시보드 형식으로 변환
@@ -61,7 +62,12 @@ export async function updateReservationStatus(
 
     // pending -> confirmed 변경 시 SMS 발송
     if (sendSMS && newStatus === 'confirmed') {
-      await smsService.sendConfirmation(updated);
+      try {
+        await simpleSMSService.sendConfirmation(updated);
+        console.log('✅ SMS 발송 성공');
+      } catch (error) {
+        console.warn('⚠️ SMS 발송 실패 (무시하고 계속):', error);
+      }
     }
 
     return { success: true, data: convertToLegacyFormat(updated) };

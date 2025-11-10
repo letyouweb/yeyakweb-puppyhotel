@@ -1,40 +1,65 @@
-import { Reservation, supabase } from './supabase';
+// SMS 발송 실제 구현 (프로덕션 Vercel API 사용)
+
+import { Reservation } from './supabase';
+
+// 개발/프로덕션 모두 Vercel API 사용
+const API_URL = 'https://xn--7n3bt8m5la.kr/api/sms/confirm';
 
 export const realSMSService = {
   async sendConfirmation(reservation: Reservation) {
-    const message = `[PuppyHotel] ${reservation.owner_name}님 ${reservation.pet_name} ${
+    const message = `[PuppyHotel] ${reservation.owner_name}님의 ${reservation.pet_name} ${
       reservation.service === 'grooming' ? '미용' : reservation.service === 'hotel' ? '호텔' : '데이케어'
-    } 예약이 확정되었습니다. 일정: ${reservation.reservation_date} ${reservation.reservation_time || ''}.`;
+    } 예약이 확정되었습니다. 일시: ${reservation.reservation_date} ${reservation.reservation_time || ''}.`;
 
-    const cleanPhone = reservation.phone?.replace(/[^0-9]/g, '') || reservation.phone;
-
-    console.log('📨 SMS 전송 요청:', {
-      to: cleanPhone,
-      text: message,
-    });
+    console.log('========================================');
+    console.log('📱 SMS 발송 시작');
+    console.log('========================================');
+    console.log('수신자:', reservation.phone);
+    console.log('메시지:', message);
+    console.log('API URL:', API_URL);
+    console.log('========================================');
 
     try {
-      const { data, error } = await supabase.functions.invoke('send-sms', {
-        body: { to: cleanPhone, text: message },
+      console.log('🚀 Vercel API 호출');
+      
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          to: reservation.phone,
+          text: message
+        })
       });
 
-      if (error) {
-        throw error;
+      console.log('📥 응답 상태:', response.status, response.ok ? 'OK' : 'ERROR');
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('❌ 에러 응답:', error);
+        throw new Error(error.error || 'SMS 발송 실패');
       }
 
-      console.log('✅ SMS 전송 성공:', data);
+      const result = await response.json();
+      console.log('✅ SMS 발송 완료!', result);
+
       return {
         success: true,
-        message: 'SMS 전송 완료',
-        data,
+        message: 'SMS 발송 완료',
+        data: result
       };
     } catch (error) {
-      console.error('⚠️ SMS 전송 실패:', error);
+      console.error('========================================');
+      console.error('❌ SMS 발송 실패');
+      console.error('에러:', error);
+      console.error('========================================');
+      
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'SMS 전송 실패',
-        message: '예약은 확정되었지만 문자 발송에 실패했습니다.',
+        error: error instanceof Error ? error.message : 'SMS 발송 실패',
+        message: '예약은 확정되었으나 SMS 발송에 실패했습니다.'
       };
     }
-  },
+  }
 };

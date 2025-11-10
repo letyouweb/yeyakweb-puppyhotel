@@ -357,31 +357,25 @@ export const settingsService = {
 
 export const smsService = {
   async sendConfirmation(reservation: Reservation) {
-    const message = `[PuppyHotel] ${reservation.owner_name}님의 ${reservation.pet_name} ${
+    const message = `[PuppyHotel] ${reservation.owner_name}님 ${reservation.pet_name} ${
       reservation.service === 'grooming' ? '미용' : reservation.service === 'hotel' ? '호텔' : '데이케어'
-    } 예약이 확정되었습니다. 일시: ${reservation.reservation_date} ${reservation.reservation_time || ''}.`;
+    } 예약이 확정되었습니다. 일정: ${reservation.reservation_date} ${reservation.reservation_time || ''}.`;
 
-    try {
-      const response = await fetch('/api/sms/confirm', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          to: reservation.phone,
-          text: message,
-        }),
-      });
+    const cleanPhone = reservation.phone?.replace(/[^0-9]/g, '') || reservation.phone;
 
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result?.error || 'SMS 발송 실패');
-      }
-      return result;
-    } catch (error) {
-      console.error('SMS 발송 실패:', error);
+    const { data, error } = await supabase.functions.invoke('send-sms', {
+      body: {
+        to: cleanPhone,
+        text: message,
+      },
+    });
+
+    if (error) {
+      console.error('SMS 전송 실패:', error);
       throw error;
     }
+
+    return data;
   },
 };
 

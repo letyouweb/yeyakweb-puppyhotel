@@ -29,6 +29,27 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+
+    <style>
+      /* Customize Readdy floating button to use branded chatbot icon */
+      #vapi-widget-floating-button {
+        width: 64px !important;
+        height: 64px !important;
+        border-radius: 50% !important;
+        background-color: transparent !important;
+        background-image: url('/yeyakweb_chatbot.png');
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: cover;
+        border: none !important;
+        box-shadow: 0 10px 25px rgba(20, 184, 166, 0.35);
+      }
+
+      #vapi-widget-floating-button svg,
+      #vapi-widget-floating-button img {
+        display: none !important;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
@@ -44,7 +65,7 @@
       accent-color="#14B8A6" 
       button-base-color="#000000" 
       button-accent-color="#FFFFFF"
-      main-label="PuppyHotel 상담"
+      main-label="문의하기"
       start-button-text="상담 시작"
       end-button-text="상담 종료"
       empty-chat-message="안녕하세요! PuppyHotel입니다. 반려동물 호텔, 미용, 데이케어 서비스에 대해 궁금한 점이 있으시면 언제든 문의해주세요."

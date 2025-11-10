@@ -11,7 +11,7 @@
 ### 2️⃣ **SOLAPI 문자 발송**
 - ✅ Edge Function `/send-sms` 생성
 - ✅ 예약 확정 시 자동 문자 발송
-- ✅ API KEY: NCSATGLIDQRVD1BS
+- ✅ API Key는 Supabase/Vercel 환경변수 탭에서만 관리 (git에 노출 금지)
 
 ### 3️⃣ **관리자 시스템**
 - ✅ Supabase 로그인/인증

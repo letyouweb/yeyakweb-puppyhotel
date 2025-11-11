@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { SolapiMessageService } from 'solapi';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -13,36 +12,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     body = typeof raw === 'string' ? (raw ? JSON.parse(raw) : {}) : (raw as Record<string, unknown>);
   } catch (error) {
     console.error('Invalid JSON payload', error);
-    return res.status(400).json({ error: 'invalid_json' });
+    return res.status(400).json({ ok: false, error: 'invalid_json' });
   }
 
   const { to, message, text } = (body || {}) as { to?: string; message?: string; text?: string };
   const smsText = message ?? text;
 
-  if (!to || !smsText) {
-    return res.status(400).json({ error: 'bad_request', hint: 'to, message(text) 필요' });
-  }
-
   const apiKey = process.env.SOLAPI_API_KEY;
   const apiSecret = process.env.SOLAPI_API_SECRET;
-  const sender = process.env.SOLAPI_SENDER || process.env.SMS_SENDER;
+  const sender = (process.env.SOLAPI_SENDER || process.env.SMS_SENDER || '').replace(/\D/g, '');
 
+  if (!to || !smsText) {
+    return res.status(400).json({ ok: false, error: 'bad_request', hint: 'to, message(text) 필요' });
+  }
   if (!apiKey || !apiSecret || !sender) {
-    return res.status(500).json({ error: 'server_env_missing' });
+    return res.status(500).json({ ok: false, error: 'server_env_missing' });
   }
 
+  const toNum = String(to).replace(/\D/g, '');
+
   try {
-    const svc = new SolapiMessageService(apiKey, apiSecret);
-    const result = await svc.sendOne({
-      to: to.replace(/\D/g, ''), // 숫자만
-      from: (sender || '').replace(/\D/g, ''), // 숫자만
-      text: smsText
+    const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
+    const payload = { message: { to: toNum, from: sender, text: smsText } };
+
+    const rsp = await fetch('https://api.solapi.com/messages/v4/send', {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${auth}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
     });
-    return res.status(200).json({ ok: true, data: result });
+
+    const textBody = await rsp.text();
+    let data: unknown;
+    try {
+      data = JSON.parse(textBody);
+    } catch {
+      data = textBody;
+    }
+
+    if (!rsp.ok) {
+      return res.status(rsp.status).json({ ok: false, upstream: data });
+    }
+
+    return res.status(200).json({ ok: true, data });
   } catch (e: any) {
-    const status = e?.response?.status ?? 500;
-    const data = e?.response?.data ?? e?.message ?? 'unknown';
-    console.error('SOLAPI ERROR', status, data);
-    return res.status(status).json({ ok: false, upstream: data });
+    return res.status(500).json({
+      ok: false,
+      upstream: { name: e?.name, message: e?.message, code: e?.code },
+    });
   }
 }

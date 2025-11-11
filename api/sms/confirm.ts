@@ -1,8 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import crypto from 'crypto';
 
 const apiKey = process.env.SOLAPI_API_KEY;
 const apiSecret = process.env.SOLAPI_API_SECRET;
 const sender = process.env.SMS_SENDER;
+
+// HMAC 서명 생성
+function getHmacSignature(timestamp: string, salt: string): string {
+  const data = timestamp + salt;
+  return crypto.createHmac('sha256', apiSecret!)
+    .update(data)
+    .digest('hex');
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 디버그 모드
@@ -12,7 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // 환경변수 확인 (디버그 모드에서만)
+  // 환경변수 확인 (디버그 모드)
   if (isDebug) {
     return res.status(200).json({
       debug: true,
@@ -21,6 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       hasSender: !!sender,
       apiKeyLength: apiKey?.length || 0,
       apiSecretLength: apiSecret?.length || 0,
+      apiKeyPrefix: apiKey?.substring(0, 4) || '',
     });
   }
 
@@ -47,45 +57,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('📱 SMS 발송 시작:', { to: cleanPhone, from: sender });
 
-    // Step 1: Solapi 인증 토큰 가져오기
-    console.log('🔑 인증 요청 시작');
-    
-    const authResponse = await fetch('https://api.solapi.com/messages/v4/auth/access-token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        apiKey: apiKey,
-        apiSecret: apiSecret,
-      }),
-    });
+    // HMAC 인증 방식
+    const timestamp = Date.now().toString();
+    const salt = Math.random().toString(36).substring(2, 15);
+    const signature = getHmacSignature(timestamp, salt);
 
-    console.log('📥 인증 응답 상태:', authResponse.status);
+    console.log('🔑 HMAC 인증 방식 사용');
 
-    if (!authResponse.ok) {
-      const authError = await authResponse.text();
-      console.error('❌ 인증 실패:', authError);
-      
-      return res.status(500).json({ 
-        error: 'Authentication failed',
-        status: authResponse.status,
-        details: authError,
-      });
-    }
-
-    const authData = await authResponse.json();
-    const accessToken = authData.accessToken;
-
-    console.log('✅ 인증 성공, 토큰 획득');
-
-    // Step 2: SMS 발송
-    console.log('📤 SMS 발송 요청');
-    
     const sendResponse = await fetch('https://api.solapi.com/messages/v4/send', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
+        'Authorization': `HMAC-SHA256 apiKey=${apiKey}, date=${timestamp}, salt=${salt}, signature=${signature}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

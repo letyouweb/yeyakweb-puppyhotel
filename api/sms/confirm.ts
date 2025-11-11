@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { SolapiMessageService } from 'solapi';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -6,17 +7,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  let body: Record<string, unknown> = {};
-  const raw = req.body ?? {};
+  // safe parse
+  let body: any = {};
   try {
-    body = typeof raw === 'string' ? (raw ? JSON.parse(raw) : {}) : (raw as Record<string, unknown>);
-  } catch (error) {
-    console.error('Invalid JSON payload', error);
+    const raw = req.body ?? {};
+    body = typeof raw === 'string' ? (raw ? JSON.parse(raw) : {}) : raw;
+  } catch {
     return res.status(400).json({ ok: false, error: 'invalid_json' });
   }
 
-  const { to, message, text } = (body || {}) as { to?: string; message?: string; text?: string };
-  const smsText = message ?? text;
+  const { to, message, text } = body || {};
+  const smsText = (message ?? text ?? '').toString().trim();
 
   const apiKey = process.env.SOLAPI_API_KEY;
   const apiSecret = process.env.SOLAPI_API_SECRET;
@@ -25,42 +26,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!to || !smsText) {
     return res.status(400).json({ ok: false, error: 'bad_request', hint: 'to, message(text) 필요' });
   }
-  if (!apiKey || !apiSecret || !sender) {
-    return res.status(500).json({ ok: false, error: 'server_env_missing' });
+  if (!apiKey || !apiSecret) {
+    return res.status(500).json({ ok: false, error: 'server_env_missing', hint: 'API KEY/SECRET' });
+  }
+  if (!sender) {
+    return res.status(500).json({ ok: false, error: 'server_env_missing', hint: 'SENDER 번호' });
   }
 
-  const toNum = String(to).replace(/\D/g, '');
-
   try {
-    const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
-    const payload = { message: { to: toNum, from: sender, text: smsText } };
+    const svc = new SolapiMessageService(apiKey, apiSecret);
 
-    const rsp = await fetch('https://api.solapi.com/messages/v4/send', {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${auth}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
+    // SDK 단건 발송 (공식 권장)
+    const result = await svc.sendOne({
+      to: String(to).replace(/\D/g, ''), // 숫자만
+      from: sender,
+      text: smsText,
     });
 
-    const textBody = await rsp.text();
-    let data: unknown;
-    try {
-      data = JSON.parse(textBody);
-    } catch {
-      data = textBody;
-    }
-
-    if (!rsp.ok) {
-      return res.status(rsp.status).json({ ok: false, upstream: data });
-    }
-
-    return res.status(200).json({ ok: true, data });
+    return res.status(200).json({ ok: true, data: result });
   } catch (e: any) {
-    return res.status(500).json({
-      ok: false,
-      upstream: { name: e?.name, message: e?.message, code: e?.code },
-    });
+    // SDK가 주는 원문 에러를 그대로 노출
+    const status  = e?.response?.status ?? 500;
+    const details = e?.response?.data ?? { name: e?.name, message: e?.message, code: e?.code };
+    console.error('SOLAPI SDK ERROR', status, details);
+    return res.status(status).json({ ok: false, upstream: details });
   }
 }

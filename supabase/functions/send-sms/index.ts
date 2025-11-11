@@ -13,7 +13,7 @@ serve(async (req) => {
   try {
     const body = await req.json();
     const to = body?.to;
-    const text = body?.text;
+    const text = body?.text ?? body?.message;
 
     if (!to || !text) {
       return new Response(JSON.stringify({ error: "missing params" }), {
@@ -24,7 +24,7 @@ serve(async (req) => {
 
     const API_KEY = Deno.env.get("SOLAPI_API_KEY");
     const API_SECRET = Deno.env.get("SOLAPI_API_SECRET");
-    const SENDER = Deno.env.get("SMS_SENDER");
+    const SENDER = Deno.env.get("SOLAPI_SENDER") ?? Deno.env.get("SMS_SENDER");
 
     if (!API_KEY || !API_SECRET || !SENDER) {
       return new Response(JSON.stringify({ error: "missing server secrets" }), {
@@ -37,7 +37,7 @@ serve(async (req) => {
     const payload = {
       messages: [
         {
-          to,
+          to: typeof to === "string" ? to.replace(/[^0-9]/g, "") : to,
           from: SENDER,
           text,
         },

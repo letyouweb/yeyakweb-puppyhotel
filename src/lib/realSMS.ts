@@ -2,8 +2,14 @@
 
 import { Reservation } from './supabase';
 
-// 개발/프로덕션 모두 Vercel API 사용
-const API_URL = 'https://xn--7n3bt8m5la.kr/api/sms/confirm';
+const DEFAULT_ENDPOINT = '/api/sms/confirm';
+
+const API_URL =
+  import.meta.env?.VITE_SMS_ENDPOINT && import.meta.env.VITE_SMS_ENDPOINT.length > 0
+    ? import.meta.env.VITE_SMS_ENDPOINT
+    : typeof window !== 'undefined'
+      ? `${window.location.origin}${DEFAULT_ENDPOINT}`
+      : DEFAULT_ENDPOINT;
 
 export const realSMSService = {
   async sendConfirmation(reservation: Reservation) {

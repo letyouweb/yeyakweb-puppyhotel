@@ -32,10 +32,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const messageService = new SolapiMessageService(apiKey, apiSecret);
-    const result = await messageService.send({
-      to: to.replace(/\D/g, ''),
-      from: sender,
+    const svc = new SolapiMessageService(apiKey, apiSecret);
+    const result = await svc.sendOne({
+      to: to.replace(/\D/g, ''), // 숫자만
+      from: (sender || '').replace(/\D/g, ''), // 숫자만
       text: smsText
     });
     return res.status(200).json({ ok: true, data: result });

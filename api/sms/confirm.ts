@@ -16,6 +16,15 @@ const svc = new SolapiMessageService(solapiKey, solapiSecret);
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  const toUpstream = (err: any) => {
+    if (err?.response?.data && typeof err.response.data === 'object') {
+      return err.response.data;
+    }
+    const errorCode = err?.errorCode ?? err?.code ?? err?.name ?? 'UnknownError';
+    const errorMessage = err?.errorMessage ?? err?.message ?? 'Unknown error';
+    return { errorCode, errorMessage };
+  };
+
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body ?? {};
     const to = String(body.to ?? '').replace(/\D/g, '');
@@ -29,7 +38,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const result = await svc.sendOne({ to, from, text });
     return res.status(200).json({ ok: true, result });
   } catch (err: any) {
-    const upstream = err?.response?.data ?? { name: err?.name, message: err?.message };
-    return res.status(500).json({ ok: false, upstream });
+    const status = Number(err?.response?.status ?? err?.httpStatus ?? 500);
+    const upstream = toUpstream(err);
+    return res.status(status >= 400 && status < 600 ? status : 500).json({ ok: false, upstream });
   }
 }

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-const { SolapiMessageService } = require('solapi');
+import { SolapiMessageService } from 'solapi';
 
 const svc = new SolapiMessageService(
   process.env.SOLAPI_API_KEY,

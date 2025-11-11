@@ -26,6 +26,12 @@ export const realSMSService = {
     console.log('========================================');
 
     try {
+      const payload = {
+        to: reservation.phone?.replace(/[^0-9]/g, ''),
+        message,
+        text: message,
+      };
+
       console.log('🚀 Vercel API 호출');
       
       const response = await fetch(API_URL, {
@@ -33,10 +39,7 @@ export const realSMSService = {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          to: reservation.phone,
-          text: message
-        })
+        body: JSON.stringify(payload)
       });
 
       console.log('📥 응답 상태:', response.status, response.ok ? 'OK' : 'ERROR');

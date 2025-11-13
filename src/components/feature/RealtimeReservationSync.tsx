@@ -1,12 +1,12 @@
-
 import { useEffect } from 'react';
 
 // 실시간 예약 동기화를 위한 유틸리티 컴포넌트
+// 브라우저의 localStorage에 전체 예약과 서비스별 예약 데이터를 초기화하고,
+// 스토리지 변경을 감지하여 다른 컴포넌트에 업데이트 이벤트를 전달합니다.
 export default function RealtimeReservationSync() {
   useEffect(() => {
-    // 페이지 로드 시 예약 데이터 초기화
+    // 초기화: 로컬 스토리지에 필요한 키가 없으면 빈 배열로 생성
     const initializeReservationData = () => {
-      // 기존 데이터가 없으면 빈 배열로 초기화
       if (!localStorage.getItem('allReservations')) {
         localStorage.setItem('allReservations', JSON.stringify([]));
       }
@@ -16,54 +16,101 @@ export default function RealtimeReservationSync() {
       if (!localStorage.getItem('groomingReservations')) {
         localStorage.setItem('groomingReservations', JSON.stringify([]));
       }
+      // 새로운 데이케어 예약 저장소 초기화
+      if (!localStorage.getItem('daycareReservations')) {
+        localStorage.setItem('daycareReservations', JSON.stringify([]));
+      }
     };
 
     initializeReservationData();
 
-    // 스토리지 변경 감지 (다른 탭에서 예약이 추가될 때)
+    // 다른 탭에서 localStorage가 변경될 때 변경을 감지하여 커스텀 이벤트를 발생
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'allReservations' || e.key === 'hotelReservations' || e.key === 'groomingReservations') {
-        // 페이지 새로고침 없이 데이터 업데이트
+      if (
+        e.key === 'allReservations' ||
+        e.key === 'hotelReservations' ||
+        e.key === 'groomingReservations' ||
+        e.key === 'daycareReservations'
+      ) {
         window.dispatchEvent(new CustomEvent('reservationUpdated'));
       }
     };
 
     window.addEventListener('storage', handleStorageChange);
-
     return () => {
       window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
-
-  return null; // 이 컴포넌트는 UI를 렌더링하지 않음
+  return null; // UI를 렌더링하지 않는 유틸리티 컴포넌트
 }
 
-// 예약 데이터 업데이트 유틸리티 함수들
-export const updateReservationData = (newReservation: any, type: 'hotel' | 'grooming') => {
+// 예약 데이터를 localStorage에 업데이트하는 유틸리티 함수
+// 전체 예약(allReservations)과 서비스별 예약(hotel/grooming/daycare) 배열에 새 예약을 추가한 후
+// reservationUpdated 이벤트를 발생시켜 달력 컴포넌트가 새 데이터를 불러오도록 합니다.
+export const updateReservationData = (
+  newReservation: any,
+  type: 'hotel' | 'grooming' | 'daycare'
+) => {
   // 전체 예약 데이터 업데이트
   const allReservations = JSON.parse(localStorage.getItem('allReservations') || '[]');
   allReservations.push(newReservation);
   localStorage.setItem('allReservations', JSON.stringify(allReservations));
 
   // 서비스별 예약 데이터 업데이트
-  const serviceKey = type === 'hotel' ? 'hotelReservations' : 'groomingReservations';
+  let serviceKey: string;
+  switch (type) {
+    case 'hotel':
+      serviceKey = 'hotelReservations';
+      break;
+    case 'grooming':
+      serviceKey = 'groomingReservations';
+      break;
+    case 'daycare':
+      serviceKey = 'daycareReservations';
+      break;
+    default:
+      serviceKey = 'groomingReservations';
+  }
   const serviceReservations = JSON.parse(localStorage.getItem(serviceKey) || '[]');
   serviceReservations.push(newReservation);
   localStorage.setItem(serviceKey, JSON.stringify(serviceReservations));
 
-  // 커스텀 이벤트 발생으로 다른 컴포넌트들에게 업데이트 알림
+  // 다른 컴포넌트에게 데이터 변경을 알림
   window.dispatchEvent(new CustomEvent('reservationUpdated'));
 };
 
+// 선택된 예약을 localStorage에서 제거하는 함수
+// 주어진 ID 배열에 해당하는 예약을 전체 예약과 각 서비스별 예약 목록에서 삭제하고
+// reservationUpdated 이벤트를 발생시켜 달력 데이터를 갱신합니다.
+export const removeReservationData = (ids: string[]) => {
+  if (!ids?.length) return;
+  // 전체 예약 배열에서 제거
+  const allReservations = JSON.parse(localStorage.getItem('allReservations') || '[]');
+  const filteredAll = allReservations.filter((r: any) => !ids.includes(r.id));
+  localStorage.setItem('allReservations', JSON.stringify(filteredAll));
+
+  // 서비스별 배열에서 제거
+  const keys = ['hotelReservations', 'groomingReservations', 'daycareReservations'];
+  keys.forEach((key) => {
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    const filtered = list.filter((r: any) => !ids.includes(r.id));
+    localStorage.setItem(key, JSON.stringify(filtered));
+  });
+
+  // 변경 알림
+  window.dispatchEvent(new CustomEvent('reservationUpdated'));
+};
+
+// 예약 통계를 반환하는 유틸리티 함수
 export const getReservationStats = () => {
   const allReservations = JSON.parse(localStorage.getItem('allReservations') || '[]');
   const today = new Date().toISOString().split('T')[0];
-  
   return {
     total: allReservations.length,
     today: allReservations.filter((r: any) => (r.date || r.checkIn) === today).length,
     hotel: allReservations.filter((r: any) => r.service === 'hotel').length,
     grooming: allReservations.filter((r: any) => r.service === 'grooming').length,
+    daycare: allReservations.filter((r: any) => r.service === 'daycare').length,
     pending: allReservations.filter((r: any) => r.status === 'pending').length,
     confirmed: allReservations.filter((r: any) => r.status === 'confirmed').length,
     completed: allReservations.filter((r: any) => r.status === 'completed').length

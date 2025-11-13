@@ -1,7 +1,12 @@
-// 대시보드 Supabase 연동 헬퍼 파일
+// 대시보드 Supabase 연동 헬퍼 파일 (커스텀 버전)
 import { reservationService } from './supabase';
 import { realSMSService } from './realSMS';
 import type { Reservation } from './supabase';
+// 로컬 스토리지 업데이트를 위해 실시간 동기화 유틸리티 가져오기
+import {
+  updateReservationData,
+  removeReservationData,
+} from '../components/feature/RealtimeReservationSync';
 
 // Supabase 예약 데이터를 대시보드 형식으로 변환
 export function convertToLegacyFormat(reservation: Reservation) {
@@ -17,7 +22,7 @@ export function convertToLegacyFormat(reservation: Reservation) {
     roomType: reservation.room_type,
     checkIn: reservation.check_in,
     checkOut: reservation.check_out,
-    style: reservation.grooming_style
+    style: reservation.grooming_style,
   };
 }
 
@@ -34,7 +39,7 @@ export function convertToSupabaseFormat(reservation: any) {
     room_type: reservation.roomType,
     check_in: reservation.checkIn,
     check_out: reservation.checkOut,
-    grooming_style: reservation.style
+    grooming_style: reservation.style,
   };
 }
 
@@ -53,11 +58,11 @@ export async function loadAllReservations() {
 export async function updateReservationStatus(
   reservationId: string,
   newStatus: string,
-  sendSMS: boolean = true
+  sendSMS: boolean = true,
 ) {
   try {
     const updated = await reservationService.update(reservationId, {
-      status: newStatus as any
+      status: newStatus as any,
     });
 
     // pending -> confirmed 변경 시 SMS 발송
@@ -82,21 +87,30 @@ export async function updateReservationStatus(
 }
 
 // 실시간 구독 설정
+// Supabase에서 새로운 예약/수정/삭제 이벤트를 감지하여 콜백을 호출하고
+// 로컬 스토리지에도 변경 사항을 반영한다.
 export function subscribeToReservations(callback: (data: any) => void) {
-  return reservationService.subscribeToChanges((payload) => {
+  return reservationService.subscribeToChanges((payload: any) => {
     console.log('예약 변경 감지:', payload);
-    
     // INSERT, UPDATE, DELETE 이벤트 처리
     if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-      callback({
-        type: payload.eventType,
-        data: convertToLegacyFormat(payload.new)
-      });
+      const legacy = convertToLegacyFormat(payload.new as Reservation);
+      callback({ type: payload.eventType, data: legacy });
+      // localStorage 업데이트: 중복 방지를 위해 먼저 해당 ID 삭제 후 추가
+      try {
+        removeReservationData([legacy.id]);
+        updateReservationData(legacy, legacy.service as any);
+      } catch (e) {
+        console.warn('localStorage 예약 동기화 실패:', e);
+      }
     } else if (payload.eventType === 'DELETE') {
-      callback({
-        type: 'DELETE',
-        id: payload.old.id
-      });
+      const id = payload.old.id;
+      callback({ type: 'DELETE', id });
+      try {
+        removeReservationData([id]);
+      } catch (e) {
+        console.warn('localStorage 예약 삭제 동기화 실패:', e);
+      }
     }
   });
 }

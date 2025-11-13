@@ -4,7 +4,10 @@ import type { User } from '@supabase/supabase-js';
 import GroomingCalendar from '../../../components/feature/GroomingCalendar';
 import HotelCalendar from '../../../components/feature/HotelCalendar';
 import DaycareCalendar from '../../../components/feature/DaycareCalendar';
-import RealtimeReservationSync, { updateReservationData } from '../../../components/feature/RealtimeReservationSync';
+import RealtimeReservationSync, {
+  updateReservationData,
+  removeReservationData,
+} from '../../../components/feature/RealtimeReservationSync';
 import { loadAllReservations, updateReservationStatus, subscribeToReservations } from '../../../lib/dashboardHelper';
 import {
   adminProfileService,
@@ -422,6 +425,12 @@ export default function AdminDashboard() {
       setReservations((prev) => prev.filter((r) => !selectedReservations.includes(r.id)));
       setSelectedReservations([]);
       setSelectAll(false);
+      // localStorage에서도 해당 예약들을 제거하여 달력 데이터에 반영
+      try {
+        removeReservationData(selectedReservations);
+      } catch (e) {
+        console.warn('localStorage 예약 삭제 중 오류:', e);
+      }
       alert('선택된 예약이 삭제되었습니다.');
     } catch (error) {
       console.error('예약 삭제 실패:', error);
@@ -471,8 +480,10 @@ export default function AdminDashboard() {
         service: 'daycare'
       };
     }
-    // localStorage 업데이트
+    // localStorage 업데이트: 기존 동일 ID가 있으면 먼저 삭제한 후 추가
     try {
+      // 동일한 예약을 제거하여 중복을 방지합니다.
+      removeReservationData([reservation.id]);
       updateReservationData(newRes, service as any);
     } catch (e) {
       console.error('예약 데이터를 업데이트하는 중 오류 발생:', e);

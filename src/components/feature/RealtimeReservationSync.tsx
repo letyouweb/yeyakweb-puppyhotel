@@ -45,15 +45,23 @@ export default function RealtimeReservationSync() {
 }
 
 // 예약 데이터를 localStorage에 업데이트하는 유틸리티 함수
-// 전체 예약(allReservations)과 서비스별 예약(hotel/grooming/daycare) 배열에 새 예약을 추가한 후
+// 전체 예약(allReservations)과 서비스별 예약(hotel/grooming/daycare) 배열에 새 예약을 추가/업데이트한 후
 // reservationUpdated 이벤트를 발생시켜 달력 컴포넌트가 새 데이터를 불러오도록 합니다.
+// 중복 방지: 동일한 ID가 있으면 기존 예약을 업데이트하고, 없으면 추가합니다.
 export const updateReservationData = (
   newReservation: any,
   type: 'hotel' | 'grooming' | 'daycare'
 ) => {
   // 전체 예약 데이터 업데이트
   const allReservations = JSON.parse(localStorage.getItem('allReservations') || '[]');
-  allReservations.push(newReservation);
+  const allIndex = allReservations.findIndex((r: any) => r.id === newReservation.id);
+  if (allIndex !== -1) {
+    // 기존 예약 업데이트
+    allReservations[allIndex] = newReservation;
+  } else {
+    // 새 예약 추가
+    allReservations.push(newReservation);
+  }
   localStorage.setItem('allReservations', JSON.stringify(allReservations));
 
   // 서비스별 예약 데이터 업데이트
@@ -72,11 +80,21 @@ export const updateReservationData = (
       serviceKey = 'groomingReservations';
   }
   const serviceReservations = JSON.parse(localStorage.getItem(serviceKey) || '[]');
-  serviceReservations.push(newReservation);
+  const serviceIndex = serviceReservations.findIndex((r: any) => r.id === newReservation.id);
+  if (serviceIndex !== -1) {
+    // 기존 예약 업데이트
+    serviceReservations[serviceIndex] = newReservation;
+  } else {
+    // 새 예약 추가
+    serviceReservations.push(newReservation);
+  }
   localStorage.setItem(serviceKey, JSON.stringify(serviceReservations));
 
   // 다른 컴포넌트에게 데이터 변경을 알림
   window.dispatchEvent(new CustomEvent('reservationUpdated'));
+  
+  // 콘솔 로그로 디버깅 정보 출력
+  console.log(`✅ 예약 업데이트 완료: ${type} - ${newReservation.petName} (${newReservation.id})`);
 };
 
 // 선택된 예약을 localStorage에서 제거하는 함수

@@ -440,6 +440,8 @@ export default function AdminDashboard() {
 
   // When a pending status is clicked, navigate to the appropriate tab based on service
   const handlePendingClick = (reservation: Reservation) => {
+    console.log('🔵 대기 예약 클릭:', reservation);
+    
     // 예약 상세를 해당 서비스 탭으로 이동시키고 로컬 스토리지에 예약을 업데이트
     const service = reservation.service;
     // 새 예약 객체를 생성 (localStorage 구조에 맞게)
@@ -480,27 +482,37 @@ export default function AdminDashboard() {
         service: 'daycare'
       };
     }
-    // localStorage 업데이트: 기존 동일 ID가 있으면 먼저 삭제한 후 추가
+    
+    // localStorage 업데이트
     try {
-      // 동일한 예약을 제거하여 중복을 방지합니다.
-      removeReservationData([reservation.id]);
+      console.log('💾 localStorage 업데이트 시작:', newRes);
+      // updateReservationData 함수가 중복을 자동으로 처리하므로 removeReservationData는 불필요
       updateReservationData(newRes, service as any);
+      console.log('✅ localStorage 업데이트 완료');
+      
+      // 약간의 지연 후 탭 이동 (localStorage 업데이트가 완료되도록)
+      setTimeout(() => {
+        // 해당 서비스 탭으로 이동
+        switch (service) {
+          case 'grooming':
+            console.log('📍 미용예약현황 탭으로 이동');
+            setActiveTab('grooming');
+            break;
+          case 'hotel':
+            console.log('📍 호텔 탭으로 이동');
+            setActiveTab('hotel');
+            break;
+          case 'daycare':
+            console.log('📍 데이케어 탭으로 이동');
+            setActiveTab('daycare');
+            break;
+          default:
+            break;
+        }
+      }, 100);
     } catch (e) {
-      console.error('예약 데이터를 업데이트하는 중 오류 발생:', e);
-    }
-    // 해당 서비스 탭으로 이동
-    switch (service) {
-      case 'grooming':
-        setActiveTab('grooming');
-        break;
-      case 'hotel':
-        setActiveTab('hotel');
-        break;
-      case 'daycare':
-        setActiveTab('daycare');
-        break;
-      default:
-        break;
+      console.error('❌ 예약 데이터 업데이트 중 오류 발생:', e);
+      alert('예약 데이터를 달력에 표시하는 중 오류가 발생했습니다.');
     }
   };
 

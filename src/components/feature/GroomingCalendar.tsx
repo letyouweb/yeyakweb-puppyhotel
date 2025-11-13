@@ -46,10 +46,14 @@ export default function GroomingCalendar() {
   }, []);
 
   const loadGroomingData = () => {
+    console.log('📊 loadGroomingData 호출');
     // 저장된 미용 예약 데이터 불러오기
     const savedData = localStorage.getItem('groomingReservations');
+    console.log('💾 localStorage에서 읽은 데이터:', savedData);
+    
     if (savedData) {
       const reservations = JSON.parse(savedData);
+      console.log('📦 파싱된 예약 개수:', reservations.length);
       const groupedData: GroomingData = {};
       
       reservations.forEach((reservation: any) => {
@@ -73,8 +77,10 @@ export default function GroomingCalendar() {
         groupedData[date].sort((a, b) => a.time.localeCompare(b.time));
       });
 
+      console.log('✅ 미용 달력 데이터 설정 완료:', Object.keys(groupedData).length, '일');
       setGroomingData(groupedData);
     } else {
+      console.log('⚠️ localStorage에 데이터 없음 - 모의 데이터 생성');
       // 모의 데이터 생성
       generateMockGroomingData();
     }

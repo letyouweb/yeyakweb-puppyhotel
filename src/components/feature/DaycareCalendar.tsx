@@ -46,10 +46,14 @@ export default function DaycareCalendar() {
   }, []);
 
   const loadDaycareData = () => {
+    console.log('📊 loadDaycareData 호출');
     // 저장된 데이케어 예약 데이터 불러오기
     const savedData = localStorage.getItem('daycareReservations');
+    console.log('💾 localStorage에서 읽은 데이터:', savedData);
+    
     if (savedData) {
       const reservations = JSON.parse(savedData);
+      console.log('📦 파싱된 예약 개수:', reservations.length);
       const groupedData: DaycareData = {};
       
       reservations.forEach((reservation: any) => {
@@ -72,8 +76,10 @@ export default function DaycareCalendar() {
         groupedData[date].sort((a, b) => a.time.localeCompare(b.time));
       });
 
+      console.log('✅ 데이케어 달력 데이터 설정 완료:', Object.keys(groupedData).length, '일');
       setDaycareData(groupedData);
     } else {
+      console.log('⚠️ localStorage에 데이터 없음 - 모의 데이터 생성');
       // 모의 데이터 생성
       generateMockDaycareData();
     }

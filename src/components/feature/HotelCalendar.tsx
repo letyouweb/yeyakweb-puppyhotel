@@ -48,10 +48,14 @@ export default function HotelCalendar() {
   }, []);
 
   const loadHotelData = () => {
+    console.log('📊 loadHotelData 호출');
     // 저장된 호텔 예약 데이터 불러오기
     const savedData = localStorage.getItem('hotelReservations');
+    console.log('💾 localStorage에서 읽은 데이터:', savedData);
+    
     if (savedData) {
       const reservations = JSON.parse(savedData);
+      console.log('📦 파싱된 예약 개수:', reservations.length);
       const groupedData: HotelData = {};
       
       reservations.forEach((reservation: any) => {
@@ -71,8 +75,10 @@ export default function HotelCalendar() {
         });
       });
 
+      console.log('✅ 호텔 달력 데이터 설정 완료:', Object.keys(groupedData).length, '일');
       setHotelData(groupedData);
     } else {
+      console.log('⚠️ localStorage에 데이터 없음 - 모의 데이터 생성');
       // 모의 데이터 생성
       generateMockHotelData();
     }

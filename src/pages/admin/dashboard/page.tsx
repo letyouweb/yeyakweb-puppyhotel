@@ -380,10 +380,15 @@ export default function AdminDashboard() {
     try {
       const result = await updateReservationStatus(reservationId, newStatus, true);
       if (result.success) {
+        const updatedReservation = result.data;
+        
         setReservations((prev) =>
-          prev.map((reservation) => (reservation.id === reservationId ? result.data : reservation))
+          prev.map((reservation) => (reservation.id === reservationId ? updatedReservation : reservation))
         );
+        
+        // ✅ confirmed 상태일 때 localStorage에 저장하여 달력에 표시
         if (newStatus === 'confirmed') {
+          updateCalendarData(updatedReservation);
           alert('예약이 확정되었으며, 고객에게 문자가 발송되었습니다.');
         }
       } else {
@@ -393,6 +398,64 @@ export default function AdminDashboard() {
       console.error('상태 변경 실패:', error);
       alert('오류가 발생했습니다.');
     }
+  };
+
+  // 🎯 달력 데이터 업데이트 함수
+  const updateCalendarData = (reservation: Reservation) => {
+    console.log('📅 달력 데이터 업데이트:', reservation);
+    
+    if (reservation.service === 'grooming') {
+      // 미용 예약을 localStorage에 저장
+      const existingData = localStorage.getItem('groomingReservations');
+      const reservations = existingData ? JSON.parse(existingData) : [];
+      
+      // 중복 체크 (같은 ID가 있으면 업데이트, 없으면 추가)
+      const index = reservations.findIndex((r: any) => r.id === reservation.id);
+      if (index >= 0) {
+        reservations[index] = reservation;
+      } else {
+        reservations.push(reservation);
+      }
+      
+      localStorage.setItem('groomingReservations', JSON.stringify(reservations));
+      console.log('✅ 미용 예약 저장 완료:', reservations.length, '개');
+      
+    } else if (reservation.service === 'hotel') {
+      // 호텔 예약을 localStorage에 저장
+      const existingData = localStorage.getItem('hotelReservations');
+      const reservations = existingData ? JSON.parse(existingData) : [];
+      
+      // 중복 체크 (같은 ID가 있으면 업데이트, 없으면 추가)
+      const index = reservations.findIndex((r: any) => r.id === reservation.id);
+      if (index >= 0) {
+        reservations[index] = reservation;
+      } else {
+        reservations.push(reservation);
+      }
+      
+      localStorage.setItem('hotelReservations', JSON.stringify(reservations));
+      console.log('✅ 호텔 예약 저장 완료:', reservations.length, '개');
+      
+    } else if (reservation.service === 'daycare') {
+      // 데이케어 예약을 localStorage에 저장
+      const existingData = localStorage.getItem('daycareReservations');
+      const reservations = existingData ? JSON.parse(existingData) : [];
+      
+      // 중복 체크 (같은 ID가 있으면 업데이트, 없으면 추가)
+      const index = reservations.findIndex((r: any) => r.id === reservation.id);
+      if (index >= 0) {
+        reservations[index] = reservation;
+      } else {
+        reservations.push(reservation);
+      }
+      
+      localStorage.setItem('daycareReservations', JSON.stringify(reservations));
+      console.log('✅ 데이케어 예약 저장 완료:', reservations.length, '개');
+    }
+    
+    // 달력 컴포넌트에 업데이트 이벤트 발생
+    window.dispatchEvent(new Event('reservationUpdated'));
+    console.log('🔄 달력 새로고침 이벤트 발생');
   };
 
   // Toggle selection for an individual reservation

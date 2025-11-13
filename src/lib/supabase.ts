@@ -89,6 +89,7 @@ interface AdminProfileInput {
   security_answer?: string;
 }
 
+// Reservation service encapsulates CRUD operations on reservations.
 export const reservationService = {
   async getAll() {
     const { data, error } = await supabase
@@ -98,7 +99,7 @@ export const reservationService = {
     if (error) throw error;
     return data as Reservation[];
   },
-  
+
   async getByDate(date: string) {
     const { data, error } = await supabase
       .from('reservations')
@@ -107,7 +108,7 @@ export const reservationService = {
     if (error) throw error;
     return data as Reservation[];
   },
-  
+
   async create(reservation: Partial<Reservation>) {
     const { data, error } = await supabase
       .from('reservations')
@@ -117,7 +118,7 @@ export const reservationService = {
     if (error) throw error;
     return data as Reservation;
   },
-  
+
   async update(id: string, updates: Partial<Reservation>) {
     const { data, error } = await supabase
       .from('reservations')
@@ -128,7 +129,30 @@ export const reservationService = {
     if (error) throw error;
     return data as Reservation;
   },
-  
+
+  /**
+   * Deletes a single reservation.
+   */
+  async remove(id: string) {
+    const { error } = await supabase
+      .from('reservations')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+  },
+
+  /**
+   * Deletes multiple reservations by their IDs.
+   */
+  async removeMany(ids: string[]) {
+    if (!ids?.length) return;
+    const { error } = await supabase
+      .from('reservations')
+      .delete()
+      .in('id', ids);
+    if (error) throw error;
+  },
+
   subscribeToChanges(callback: (payload: any) => void) {
     return supabase
       .channel('reservations')
@@ -340,13 +364,13 @@ export const settingsService = {
     if (error) throw error;
     return data?.setting_value;
   },
-  
+
   async set(key: string, value: any) {
     const { data, error } = await supabase
       .from('settings')
-      .upsert({ 
-        setting_key: key, 
-        setting_value: value 
+      .upsert({
+        setting_key: key,
+        setting_value: value
       })
       .select()
       .single();
@@ -387,45 +411,47 @@ export const chatbotService = {
       .eq('reservation_date', date)
       .eq('service', service)
       .in('status', ['confirmed', 'pending']);
-    
+
     if (error) throw error;
-    
+
     const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
     const schedule = await weeklyGroomingScheduleService.getByDay(dayOfWeek);
-    
+
     if (!schedule || !schedule.is_open) {
       return [];
     }
-    
+
     const bookedTimes = reservations?.map(r => r.reservation_time) || [];
     const availableSlots = schedule.time_slots.filter(
       (slot: string) => slot && !bookedTimes.includes(slot)
     );
-    
+
     return availableSlots;
   },
-  
+
   async getReservationStatus(date: string) {
     const { data, error } = await supabase
       .from('reservations')
       .select('service, status')
       .eq('reservation_date', date);
-    
+
     if (error) throw error;
-    
+
     const summary = {
       hotel: { available: 10, booked: 0 },
       grooming: { available: 8, booked: 0 },
       daycare: { available: 15, booked: 0 }
     };
-    
+
     data?.forEach(res => {
       if (res.status === 'confirmed' || res.status === 'pending') {
+        // @ts-ignore
         summary[res.service as keyof typeof summary].booked++;
+        // @ts-ignore
         summary[res.service as keyof typeof summary].available--;
       }
     });
-    
+
     return summary;
   }
 };

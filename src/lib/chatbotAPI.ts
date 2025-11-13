@@ -1,12 +1,21 @@
 // AI 챗봇에서 예약을 Supabase에 저장하는 전역 함수
 // 홈페이지가 로드되면 자동으로 window 객체에 등록됩니다
 
-import { reservationService, faqService } from '../lib/supabase';
+import { faqService } from './supabase';
 
-// 챗봇이 호출할 수 있는 예약 생성 함수
+/**
+ * 챗봇 예약 API를 초기화합니다.
+ *
+ * 기존 구현에서는 createGroomingReservation, createHotelReservation,
+ * createDaycareReservation 함수가 Supabase에 예약을 생성했습니다.
+ * 본 사이트에서는 챗봇을 통해 예약을 받지 않기 때문에 각
+ * 예약 생성 함수는 예약을 생성하지 않고 안내 메시지만 반환합니다.
+ *
+ * 사용자는 예약폼을 통해서만 예약을 접수할 수 있습니다.
+ */
 export function setupChatbotReservationAPI() {
-  // 미용 예약 생성
-  (window as any).createGroomingReservation = async (data: {
+  // 미용 예약 생성 요청에 대한 응답
+  (window as any).createGroomingReservation = async (_data: {
     petName: string;
     ownerName: string;
     phone: string;
@@ -15,35 +24,17 @@ export function setupChatbotReservationAPI() {
     style: string;
     notes?: string;
   }) => {
-    try {
-      const result = await reservationService.create({
-        pet_name: data.petName,
-        owner_name: data.ownerName,
-        service: 'grooming',
-        reservation_date: data.date,
-        reservation_time: data.time,
-        status: 'pending',
-        phone: data.phone,
-        grooming_style: data.style,
-        special_notes: data.notes || ''
-      });
-
-      return {
-        success: true,
-        reservationId: result.id,
-        message: `${data.petName}의 미용 예약이 접수되었습니다. 관리자가 확인 후 연락드립니다.`
-      };
-    } catch (error) {
-      console.error('예약 생성 실패:', error);
-      return {
-        success: false,
-        error: '예약 중 오류가 발생했습니다.'
-      };
-    }
+    // 챗봇에서는 예약을 받지 않으므로 안내 메시지를 반환
+    const message =
+      '챗봇으로 예약접수는 받지 않고 있습니다. 예약신청은 예약폼에 작성해 주시기 바랍니다.';
+    return {
+      success: false,
+      error: message,
+    };
   };
 
-  // 호텔 예약 생성
-  (window as any).createHotelReservation = async (data: {
+  // 호텔 예약 생성 요청에 대한 응답
+  (window as any).createHotelReservation = async (_data: {
     petName: string;
     ownerName: string;
     phone: string;
@@ -52,36 +43,16 @@ export function setupChatbotReservationAPI() {
     roomType?: string;
     notes?: string;
   }) => {
-    try {
-      const result = await reservationService.create({
-        pet_name: data.petName,
-        owner_name: data.ownerName,
-        service: 'hotel',
-        reservation_date: data.checkIn,
-        status: 'pending',
-        phone: data.phone,
-        room_type: data.roomType || 'medium',
-        check_in: data.checkIn,
-        check_out: data.checkOut,
-        special_notes: data.notes || ''
-      });
-
-      return {
-        success: true,
-        reservationId: result.id,
-        message: `${data.petName}의 호텔 예약이 접수되었습니다. 관리자가 확인 후 연락드립니다.`
-      };
-    } catch (error) {
-      console.error('예약 생성 실패:', error);
-      return {
-        success: false,
-        error: '예약 중 오류가 발생했습니다.'
-      };
-    }
+    const message =
+      '챗봇으로 예약접수는 받지 않고 있습니다. 예약신청은 예약폼에 작성해 주시기 바랍니다.';
+    return {
+      success: false,
+      error: message,
+    };
   };
 
-  // 데이케어 예약 생성
-  (window as any).createDaycareReservation = async (data: {
+  // 데이케어 예약 생성 요청에 대한 응답
+  (window as any).createDaycareReservation = async (_data: {
     petName: string;
     ownerName: string;
     phone: string;
@@ -89,54 +60,36 @@ export function setupChatbotReservationAPI() {
     time: string;
     notes?: string;
   }) => {
-    try {
-      const result = await reservationService.create({
-        pet_name: data.petName,
-        owner_name: data.ownerName,
-        service: 'daycare',
-        reservation_date: data.date,
-        reservation_time: data.time,
-        status: 'pending',
-        phone: data.phone,
-        special_notes: data.notes || ''
-      });
-
-      return {
-        success: true,
-        reservationId: result.id,
-        message: `${data.petName}의 데이케어 예약이 접수되었습니다. 관리자가 확인 후 연락드립니다.`
-      };
-    } catch (error) {
-      console.error('예약 생성 실패:', error);
-      return {
-        success: false,
-        error: '예약 중 오류가 발생했습니다.'
-      };
-    }
+    const message =
+      '챗봇으로 예약접수는 받지 않고 있습니다. 예약신청은 예약폼에 작성해 주시기 바랍니다.';
+    return {
+      success: false,
+      error: message,
+    };
   };
 
   // FAQ 조회 (챗봇이 자주 묻는 질문에 답변할 수 있도록)
   (window as any).getFAQs = async () => {
     try {
       const faqs = await faqService.list();
-      const activeFaqs = faqs.filter(faq => faq.is_active);
-      
+      const activeFaqs = faqs.filter((faq) => faq.is_active);
+
       return {
         success: true,
         count: activeFaqs.length,
-        faqs: activeFaqs.map(faq => ({
+        faqs: activeFaqs.map((faq) => ({
           question: faq.question,
           answer: faq.answer,
-          tags: faq.tags || []
+          tags: faq.tags || [],
         })),
-        message: `${activeFaqs.length}개의 FAQ를 찾았습니다.`
+        message: `${activeFaqs.length}개의 FAQ를 찾았습니다.`,
       };
     } catch (error) {
       console.error('FAQ 조회 실패:', error);
       return {
         success: false,
         error: 'FAQ를 불러오는 중 오류가 발생했습니다.',
-        faqs: []
+        faqs: [],
       };
     }
   };
@@ -148,6 +101,6 @@ export function setupChatbotReservationAPI() {
     'window.createGroomingReservation(data)',
     'window.createHotelReservation(data)',
     'window.createDaycareReservation(data)',
-    'window.getFAQs()'
+    'window.getFAQs()',
   ]);
 }

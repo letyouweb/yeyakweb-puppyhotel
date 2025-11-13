@@ -12,14 +12,20 @@ interface ReservationStatus {
   daycare: { available: number; booked: number };
 }
 
+/**
+ * 챗봇과 연동하여 예약 조회 기능을 제공하는 컴포넌트입니다.
+ *
+ * 로드 시 예약 생성/FAQ 함수 및 예약 조회 함수를 window 객체에 등록합니다.
+ * UI는 화면에 표시되지 않으며 챗봇이 직접 window 함수를 호출합니다.
+ */
 export default function ChatbotReservationAPI() {
   const [status, setStatus] = useState<ReservationStatus | null>(null);
 
   // 챗봇이 호출할 수 있는 전역 함수 등록
   useEffect(() => {
-    // 예약 생성 API 등록
+    // 예약 생성 API 등록 (챗봇에서는 예약을 생성하지 않고 안내 메시지를 반환함)
     setupChatbotReservationAPI();
-    
+
     // 특정 날짜의 예약 가능 시간 조회
     (window as any).getAvailableSlots = async (date: string, service: string) => {
       try {
@@ -29,14 +35,15 @@ export default function ChatbotReservationAPI() {
           date,
           service,
           availableSlots: slots,
-          message: slots.length > 0 
-            ? `${date}에 ${slots.length}개의 예약 가능 시간이 있습니다.`
-            : `${date}는 예약이 마감되었습니다.`
+          message:
+            slots.length > 0
+              ? `${date}에 ${slots.length}개의 예약 가능 시간이 있습니다.`
+              : `${date}는 예약이 마감되었습니다.`,
         };
       } catch (error) {
         return {
           success: false,
-          error: '예약 조회에 실패했습니다.'
+          error: '예약 조회에 실패했습니다.',
         };
       }
     };
@@ -49,12 +56,12 @@ export default function ChatbotReservationAPI() {
           success: true,
           date,
           summary,
-          message: `호텔 ${summary.hotel.available}개, 미용 ${summary.grooming.available}개, 데이케어 ${summary.daycare.available}개 예약 가능합니다.`
+          message: `호텔 ${summary.hotel.available}개, 미용 ${summary.grooming.available}개, 데이케어 ${summary.daycare.available}개 예약 가능합니다.`,
         };
       } catch (error) {
         return {
           success: false,
-          error: '예약 현황 조회에 실패했습니다.'
+          error: '예약 현황 조회에 실패했습니다.',
         };
       }
     };
@@ -70,6 +77,7 @@ export default function ChatbotReservationAPI() {
       delete (window as any).getAvailableSlots;
       delete (window as any).getReservationStatus;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadTodayStatus = async () => {
@@ -78,7 +86,7 @@ export default function ChatbotReservationAPI() {
       const summary = await chatbotService.getReservationStatus(today);
       setStatus({
         date: today,
-        ...summary
+        ...summary,
       });
     } catch (error) {
       console.error('예약 현황 로드 실패:', error);
@@ -98,7 +106,7 @@ export const CHATBOT_RESERVATION_GUIDE = `
    
 2. 특정 날짜의 전체 예약 현황:
    window.getReservationStatus('2024-12-25')
-
+ 
 3. FAQ 조회:
    window.getFAQs()
 

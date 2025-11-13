@@ -1,10 +1,20 @@
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { User } from '@supabase/supabase-js';
 import GroomingCalendar from '../../../components/feature/GroomingCalendar';
+import HotelCalendar from '../../../components/feature/HotelCalendar';
+import DaycareCalendar from '../../../components/feature/DaycareCalendar';
+import RealtimeReservationSync, { updateReservationData } from '../../../components/feature/RealtimeReservationSync';
 import { loadAllReservations, updateReservationStatus, subscribeToReservations } from '../../../lib/dashboardHelper';
-import { adminProfileService, adminService, calendarSettingsService, weeklyGroomingScheduleService, faqService, type FAQ } from '../../../lib/supabase';
+import {
+  adminProfileService,
+  adminService,
+  calendarSettingsService,
+  weeklyGroomingScheduleService,
+  faqService,
+  reservationService,
+  type FAQ
+} from '../../../lib/supabase';
 
 interface Reservation {
   id: string;
@@ -78,6 +88,10 @@ const createDefaultWeeklySchedule = (): WeeklySchedule => JSON.parse(JSON.string
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('calendar');
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  // Selected reservation IDs for bulk deletion
+  const [selectedReservations, setSelectedReservations] = useState<string[]>([]);
+  // Flag to indicate if all reservations are selected
+  const [selectAll, setSelectAll] = useState(false);
   const [adminAccount, setAdminAccount] = useState<AdminAccount>({
     username: 'admin',
     email: 'admin@puppyhotel.com',
@@ -86,7 +100,6 @@ export default function AdminDashboard() {
   });
   const [isEditingAccount, setIsEditingAccount] = useState(false);
   const [calendarSettings, setCalendarSettings] = useState(() => cloneDefaultCalendarSettings());
-
   // 요일별 미용예약 설정
   const [weeklyGroomingSchedule, setWeeklyGroomingSchedule] = useState<WeeklySchedule>(() => createDefaultWeeklySchedule());
   const [supabaseUser, setSupabaseUser] = useState<User | null>(null);
@@ -97,14 +110,11 @@ export default function AdminDashboard() {
   const [accountSaving, setAccountSaving] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
   const [passwordSaving, setPasswordSaving] = useState(false);
-  
   // FAQ state
   const [faqs, setFaqs] = useState<FAQ[]>([]);
   const [faqForm, setFaqForm] = useState<FAQ>(DEFAULT_FAQ_FORM);
   const [faqLoading, setFaqLoading] = useState(false);
-
   const navigate = useNavigate();
-
   const dayNames = {
     monday: 'Monday',
     tuesday: 'Tuesday',
@@ -127,33 +137,27 @@ export default function AdminDashboard() {
         setFaqLoading(false);
       }
     };
-
     fetchFaqs();
   }, []);
 
   useEffect(() => {
     let subscription: { unsubscribe: () => void } | null = null;
-
     const initializeDashboard = async () => {
       try {
         const session = await adminService.getSession();
         const user = session?.user;
-
         if (!user) {
           navigate('/admin');
           return;
         }
-
         setSupabaseUser(user);
         localStorage.setItem('adminAuth', 'true');
-
         const [reservationData, calendarData, weeklyData, profile] = await Promise.all([
           loadAllReservations(),
           calendarSettingsService.getLatest(),
           weeklyGroomingScheduleService.getAll(),
           adminProfileService.getByUserId(user.id)
         ]);
-
         setReservations(reservationData);
         if (calendarData) {
           setCalendarSettings({
@@ -167,7 +171,6 @@ export default function AdminDashboard() {
           setCalendarSettings(cloneDefaultCalendarSettings());
           setCalendarSettingsId(null);
         }
-
         if (weeklyData?.length) {
           const normalized: WeeklySchedule = createDefaultWeeklySchedule();
           weeklyData.forEach((row) => {
@@ -184,7 +187,6 @@ export default function AdminDashboard() {
         } else {
           setWeeklyGroomingSchedule(createDefaultWeeklySchedule());
         }
-
         if (profile) {
           setAdminProfileId(profile.id || null);
           setAdminAccount({
@@ -203,9 +205,7 @@ export default function AdminDashboard() {
         console.error('대시보드 초기화 실패:', error);
       }
     };
-
     initializeDashboard();
-
     subscription = subscribeToReservations((update) => {
       if (update.type === 'INSERT' || update.type === 'UPDATE') {
         setReservations((prev) => {
@@ -219,12 +219,10 @@ export default function AdminDashboard() {
         setReservations((prev) => prev.filter((r) => r.id !== update.id));
       }
     });
-
     return () => {
       subscription?.unsubscribe();
     };
   }, [navigate]);
-
 
   const handleLogout = async () => {
     try {
@@ -239,7 +237,6 @@ export default function AdminDashboard() {
     const updatedSettings = { ...calendarSettings, isEnabled: true };
     setCalendarSettings(updatedSettings);
     setCalendarSaving(true);
-
     try {
       const saved = await calendarSettingsService.upsert({
         id: calendarSettingsId || undefined,
@@ -264,7 +261,6 @@ export default function AdminDashboard() {
       navigate('/admin');
       return;
     }
-
     setAccountSaving(true);
     try {
       const profile = await adminProfileService.upsert({
@@ -276,11 +272,9 @@ export default function AdminDashboard() {
         security_answer: adminAccount.securityAnswer?.trim() ? adminAccount.securityAnswer : undefined
       });
       setAdminProfileId(profile.id || null);
-
       if (adminAccount.email && supabaseUser.email !== adminAccount.email) {
         await adminService.updateEmail(adminAccount.email);
       }
-
       setAdminAccount((prev) => ({ ...prev, securityAnswer: '' }));
       setIsEditingAccount(false);
       alert('관리자 계정 정보가 Supabase에 안전하게 저장되었습니다.');
@@ -298,17 +292,14 @@ export default function AdminDashboard() {
       navigate('/admin');
       return;
     }
-
     if (passwordForm.newPassword.length < 8) {
       alert('비밀번호는 최소 8자리 이상이어야 합니다.');
       return;
     }
-
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       alert('비밀번호가 일치하지 않습니다.');
       return;
     }
-
     setPasswordSaving(true);
     try {
       await adminService.updatePassword(passwordForm.newPassword);
@@ -354,11 +345,10 @@ export default function AdminDashboard() {
         time_slots: schedule.timeSlots,
         max_bookings: schedule.maxBookings
       }));
-
       const saved = await weeklyGroomingScheduleService.upsert(payload);
       if (saved?.length) {
         const normalized = { ...weeklyGroomingSchedule };
-        saved.forEach((row) => {
+        saved.forEach((row: any) => {
           const key = (row.day_of_week || '').toLowerCase();
           if (!key) return;
           normalized[key] = {
@@ -390,7 +380,6 @@ export default function AdminDashboard() {
         setReservations((prev) =>
           prev.map((reservation) => (reservation.id === reservationId ? result.data : reservation))
         );
-
         if (newStatus === 'confirmed') {
           alert('예약이 확정되었으며, 고객에게 문자가 발송되었습니다.');
         }
@@ -402,16 +391,115 @@ export default function AdminDashboard() {
       alert('오류가 발생했습니다.');
     }
   };
-  
+
+  // Toggle selection for an individual reservation
+  const toggleSelectReservation = (id: string) => {
+    setSelectedReservations((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((rId) => rId !== id);
+      }
+      return [...prev, id];
+    });
+  };
+
+  // Toggle select all reservations
+  const toggleSelectAll = () => {
+    if (selectAll) {
+      setSelectAll(false);
+      setSelectedReservations([]);
+    } else {
+      setSelectAll(true);
+      setSelectedReservations(reservations.map((r) => r.id));
+    }
+  };
+
+  // Delete selected reservations
+  const deleteSelectedReservations = async () => {
+    if (!selectedReservations.length) return;
+    if (!confirm('선택된 예약을 삭제하시겠습니까?')) return;
+    try {
+      await reservationService.removeMany(selectedReservations);
+      setReservations((prev) => prev.filter((r) => !selectedReservations.includes(r.id)));
+      setSelectedReservations([]);
+      setSelectAll(false);
+      alert('선택된 예약이 삭제되었습니다.');
+    } catch (error) {
+      console.error('예약 삭제 실패:', error);
+      alert('예약 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  // When a pending status is clicked, navigate to the appropriate tab based on service
+  const handlePendingClick = (reservation: Reservation) => {
+    // 예약 상세를 해당 서비스 탭으로 이동시키고 로컬 스토리지에 예약을 업데이트
+    const service = reservation.service;
+    // 새 예약 객체를 생성 (localStorage 구조에 맞게)
+    let newRes: any = {};
+    if (service === 'grooming') {
+      newRes = {
+        id: reservation.id,
+        petName: reservation.petName,
+        ownerName: reservation.ownerName,
+        date: reservation.date,
+        time: reservation.time,
+        phone: reservation.phone,
+        style: reservation.style || '기본미용',
+        status: reservation.status,
+        service: 'grooming'
+      };
+    } else if (service === 'hotel') {
+      newRes = {
+        id: reservation.id,
+        petName: reservation.petName,
+        ownerName: reservation.ownerName,
+        checkIn: reservation.checkIn || reservation.date,
+        checkOut: reservation.checkOut || reservation.date,
+        roomType: reservation.roomType || '일반룸',
+        phone: reservation.phone,
+        status: reservation.status,
+        service: 'hotel'
+      };
+    } else if (service === 'daycare') {
+      newRes = {
+        id: reservation.id,
+        petName: reservation.petName,
+        ownerName: reservation.ownerName,
+        date: reservation.date,
+        time: reservation.time,
+        phone: reservation.phone,
+        status: reservation.status,
+        service: 'daycare'
+      };
+    }
+    // localStorage 업데이트
+    try {
+      updateReservationData(newRes, service as any);
+    } catch (e) {
+      console.error('예약 데이터를 업데이트하는 중 오류 발생:', e);
+    }
+    // 해당 서비스 탭으로 이동
+    switch (service) {
+      case 'grooming':
+        setActiveTab('grooming');
+        break;
+      case 'hotel':
+        setActiveTab('hotel');
+        break;
+      case 'daycare':
+        setActiveTab('daycare');
+        break;
+      default:
+        break;
+    }
+  };
+
   // FAQ 관련 핸들러 함수들
   const resetFaqForm = () => setFaqForm(DEFAULT_FAQ_FORM);
-
   const saveFAQ = async () => {
     if (!faqForm.question?.trim() || !faqForm.answer?.trim()) {
       alert('질문과 답변을 모두 입력해 주세요.');
       return;
     }
-
     const payload: FAQ = {
       ...faqForm,
       question: faqForm.question.trim(),
@@ -420,7 +508,6 @@ export default function AdminDashboard() {
       sort_order: faqForm.sort_order ?? faqs.length + 1,
       is_active: faqForm.is_active ?? true,
     };
-
     try {
       setFaqLoading(true);
       if (faqForm.id) {
@@ -450,7 +537,6 @@ export default function AdminDashboard() {
     if (!confirm('해당 FAQ를 삭제하시겠습니까?')) {
       return;
     }
-
     try {
       setFaqLoading(true);
       await faqService.remove(id);
@@ -465,9 +551,6 @@ export default function AdminDashboard() {
       setFaqLoading(false);
     }
   };
-
-  // 문자 발송 함수 (시뮬레이션)
-
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -495,6 +578,8 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* 실시간 로컬스토리지 예약 동기화 컴포넌트 */}
+      <RealtimeReservationSync />
       {/* Header */}
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -518,13 +603,11 @@ export default function AdminDashboard() {
           </div>
         </div>
       </header>
-
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">관리자 대시보드</h2>
           <p className="text-gray-600">PuppyHotel 운영 관리 시스템</p>
         </div>
-
         {/* Tab Navigation */}
         <div className="bg-white rounded-lg shadow-sm mb-8">
           <div className="border-b border-gray-200">
@@ -601,7 +684,6 @@ export default function AdminDashboard() {
               </button>
             </nav>
           </div>
-
           <div className="p-6">
             {activeTab === 'calendar' && (
               <div className="space-y-6">
@@ -615,7 +697,6 @@ export default function AdminDashboard() {
                       <p className="text-gray-600">고객들이 24시간 예약 문의를 할 수 있도록 설정합니다</p>
                     </div>
                   </div>
-                  
                   <div className="grid md:grid-cols-2 gap-6 mb-6">
                     <div className="bg-white rounded-lg p-4">
                       <h4 className="font-semibold text-gray-900 mb-3">
@@ -660,7 +741,6 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                     </div>
-                    
                     <div className="bg-white rounded-lg p-4">
                       <h4 className="font-semibold text-gray-900 mb-3">
                         <i className="ri-robot-line mr-2 text-teal-600"></i>AI 챗봇 상태
@@ -677,7 +757,6 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                   </div>
-
                   <button
                     onClick={handleCalendarSetup}
                     disabled={calendarSaving}
@@ -688,7 +767,6 @@ export default function AdminDashboard() {
                 </div>
               </div>
             )}
-
             {activeTab === 'weekly-schedule' && (
               <div className="space-y-6">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
@@ -707,7 +785,6 @@ export default function AdminDashboard() {
                     </button>
                   </div>
                 </div>
-
                 <div className="grid gap-6">
                   {Object.entries(weeklyGroomingSchedule).map(([day, schedule]) => (
                     <div key={day} className="bg-white rounded-lg border border-gray-200 p-6">
@@ -723,7 +800,7 @@ export default function AdminDashboard() {
                               onChange={(e) => handleWeeklyScheduleUpdate(day, 'isOpen', e.target.checked)}
                               className="sr-only"
                             />
-                            <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${schedule.isOpen ? 'bg-teal-600' : 'bg-gray-200'}`}>
+                            <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${schedule.isOpen ? 'bg-teal-600' : 'bg-gray-200'}`}> 
                               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${schedule.isOpen ? 'translate-x-6' : 'translate-x-1'}`} />
                             </div>
                             <span className="ml-2 text-sm text-gray-600">
@@ -748,7 +825,6 @@ export default function AdminDashboard() {
                           </div>
                         )}
                       </div>
-
                       {schedule.isOpen && (
                         <div>
                           <div className="mb-4">
@@ -780,9 +856,7 @@ export default function AdminDashboard() {
                                     input.value = '';
                                   }
                                 }}
-                                className="bg-teal-600 text-white px-3 py-1 rounded text-sm hover:bg-teal-7
-
-transition-colors whitespace-nowrap cursor-pointer"
+                                className="bg-teal-600 text-white px-3 py-1 rounded text-sm hover:bg-teal-700 transition-colors whitespace-nowrap cursor-pointer"
                               >
                                 <i className="ri-add-line mr-1"></i>시간 추가
                               </button>
@@ -793,7 +867,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                     </div>
                   ))}
                 </div>
-
                 <div className="bg-yellow-50 rounded-lg p-4">
                   <div className="flex items-start">
                     <i className="ri-lightbulb-line text-yellow-600 mr-2 mt-1"></i>
@@ -809,11 +882,9 @@ transition-colors whitespace-nowrap cursor-pointer"
                 </div>
               </div>
             )}
-
             {activeTab === 'reservations' && (
               <div className="space-y-6">
                 <h3 className="text-xl font-bold text-gray-900">예약 관리</h3>
-                
                 <div className="grid md:grid-cols-4 gap-6">
                   <div className="bg-blue-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
@@ -826,7 +897,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                       데이케어 {todayReservations.filter(r => r.service === 'daycare').length}건
                     </p>
                   </div>
-                  
                   <div className="bg-green-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h4 className="font-semibold text-gray-900">이번 주</h4>
@@ -834,7 +904,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                     </div>
                     <p className="text-sm text-gray-600">전체 예약 건수</p>
                   </div>
-                  
                   <div className="bg-yellow-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h4 className="font-semibold text-gray-900">대기 중</h4>
@@ -844,7 +913,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                     </div>
                     <p className="text-sm text-gray-600">확정 대기 예약</p>
                   </div>
-                  
                   <div className="bg-purple-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h4 className="font-semibold text-gray-900">완료된 예약</h4>
@@ -855,7 +923,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                     <p className="text-sm text-gray-600">이번 달 완료 건수</p>
                   </div>
                 </div>
-
                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-200">
                     <h4 className="font-semibold text-gray-900">실시간 예약 현황</h4>
@@ -871,6 +938,25 @@ transition-colors whitespace-nowrap cursor-pointer"
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상태</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">연락처</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">관리</th>
+                          {/* Selection & Delete column */}
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                checked={selectAll}
+                                onChange={toggleSelectAll}
+                                className="h-4 w-4 text-teal-600 border-gray-300 rounded"
+                              />
+                              <button
+                                type="button"
+                                onClick={deleteSelectedReservations}
+                                disabled={selectedReservations.length === 0}
+                                className={`text-red-600 font-medium ${selectedReservations.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:text-red-800'}`}
+                              >
+                                삭제
+                              </button>
+                            </div>
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
@@ -893,10 +979,17 @@ transition-colors whitespace-nowrap cursor-pointer"
                               {reservation.date} {reservation.time}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(reservation.status)}`}>
+                              <span
+                                className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(reservation.status)} ${reservation.status === 'pending' ? 'cursor-pointer underline' : ''}`}
+                                onClick={() => {
+                                  if (reservation.status === 'pending') {
+                                    handlePendingClick(reservation);
+                                  }
+                                }}
+                              >
                                 {reservation.status === 'confirmed' ? '확정' :
-                                 reservation.status === 'pending' ? '대기' :
-                                 reservation.status === 'completed' ? '완료' : '취소'}
+                                  reservation.status === 'pending' ? '대기' :
+                                  reservation.status === 'completed' ? '완료' : '취소'}
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -926,6 +1019,15 @@ transition-colors whitespace-nowrap cursor-pointer"
                                 <i className="ri-close-line mr-1"></i>취소
                               </button>
                             </td>
+                            {/* Row selection checkbox */}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <input
+                                type="checkbox"
+                                checked={selectedReservations.includes(reservation.id)}
+                                onChange={() => toggleSelectReservation(reservation.id)}
+                                className="h-4 w-4 text-teal-600 border-gray-300 rounded"
+                              />
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -934,7 +1036,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                 </div>
               </div>
             )}
-
             {activeTab === 'grooming' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -944,7 +1045,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                     <span className="text-sm text-gray-600">실시간 업데이트</span>
                   </div>
                 </div>
-                
                 <div className="grid md:grid-cols-4 gap-6">
                   <div className="bg-pink-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
@@ -955,7 +1055,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                     </div>
                     <p className="text-sm text-gray-600">진행 중인 미용</p>
                   </div>
-                  
                   <div className="bg-indigo-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h4 className="font-semibold text-gray-900">대기 중</h4>
@@ -965,7 +1064,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                     </div>
                     <p className="text-sm text-gray-600">예약 대기</p>
                   </div>
-                  
                   <div className="bg-green-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h4 className="font-semibold text-gray-900">완료</h4>
@@ -975,7 +1073,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                     </div>
                     <p className="text-sm text-gray-600">오늘 완료</p>
                   </div>
-                  
                   <div className="bg-orange-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h4 className="font-semibold text-gray-900">총 예약</h4>
@@ -984,10 +1081,8 @@ transition-colors whitespace-nowrap cursor-pointer"
                     <p className="text-sm text-gray-600">이번 주 전체</p>
                   </div>
                 </div>
-
                 {/* 미용 예약 달력 */}
                 <GroomingCalendar />
-
                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
                     <h4 className="font-semibold text-gray-900">미용 예약 상세 현황</h4>
@@ -1027,10 +1122,10 @@ transition-colors whitespace-nowrap cursor-pointer"
                               {reservation.style || '기본미용'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(reservation.status)}`}>
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(reservation.status)}`}> 
                                 {reservation.status === 'confirmed' ? '확정' :
-                                 reservation.status === 'pending' ? '대기' :
-                                 reservation.status === 'completed' ? '완료' : '취소'}
+                                  reservation.status === 'pending' ? '대기' :
+                                  reservation.status === 'completed' ? '완료' : '취소'}
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -1046,7 +1141,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                 </div>
               </div>
             )}
-
             {activeTab === 'hotel' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -1056,7 +1150,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                     <span className="text-sm text-gray-600">실시간 업데이트</span>
                   </div>
                 </div>
-                
                 <div className="grid md:grid-cols-4 gap-6">
                   <div className="bg-blue-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
@@ -1067,7 +1160,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                     </div>
                     <p className="text-sm text-gray-600">신규 입실</p>
                   </div>
-                  
                   <div className="bg-purple-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h4 className="font-semibold text-gray-900">현재 투숙</h4>
@@ -1077,7 +1169,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                     </div>
                     <p className="text-sm text-gray-600">투숙 중</p>
                   </div>
-                  
                   <div className="bg-green-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h4 className="font-semibold text-gray-900">오늘 체크아웃</h4>
@@ -1087,7 +1178,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                     </div>
                     <p className="text-sm text-gray-600">퇴실 예정</p>
                   </div>
-                  
                   <div className="bg-orange-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h4 className="font-semibold text-gray-900">총 예약</h4>
@@ -1096,7 +1186,8 @@ transition-colors whitespace-nowrap cursor-pointer"
                     <p className="text-sm text-gray-600">이번 주 전체</p>
                   </div>
                 </div>
-
+                {/* 호텔 예약 달력 */}
+                <HotelCalendar />
                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-200">
                     <h4 className="font-semibold text-gray-900">호텔 예약 현황</h4>
@@ -1138,8 +1229,8 @@ transition-colors whitespace-nowrap cursor-pointer"
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(reservation.status)}`}>
                                 {reservation.status === 'confirmed' ? '확정' :
-                                 reservation.status === 'pending' ? '대기' :
-                                 reservation.status === 'completed' ? '완료' : '취소'}
+                                  reservation.status === 'pending' ? '대기' :
+                                  reservation.status === 'completed' ? '완료' : '취소'}
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -1155,7 +1246,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                 </div>
               </div>
             )}
-
             {activeTab === 'daycare' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -1165,7 +1255,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                     <span className="text-sm text-gray-600">실시간 업데이트</span>
                   </div>
                 </div>
-                
                 <div className="grid md:grid-cols-4 gap-6">
                   <div className="bg-orange-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
@@ -1176,7 +1265,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                     </div>
                     <p className="text-sm text-gray-600">오늘 데이케어</p>
                   </div>
-                  
                   <div className="bg-green-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h4 className="font-semibold text-gray-900">현재 돌봄</h4>
@@ -1186,7 +1274,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                     </div>
                     <p className="text-sm text-gray-600">돌봄 중</p>
                   </div>
-                  
                   <div className="bg-blue-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h4 className="font-semibold text-gray-900">완료</h4>
@@ -1196,7 +1283,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                     </div>
                     <p className="text-sm text-gray-600">오늘 완료</p>
                   </div>
-                  
                   <div className="bg-purple-50 rounded-lg p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h4 className="font-semibold text-gray-900">총 예약</h4>
@@ -1205,7 +1291,8 @@ transition-colors whitespace-nowrap cursor-pointer"
                     <p className="text-sm text-gray-600">이번 주 전체</p>
                   </div>
                 </div>
-
+                {/* 데이케어 예약 달력 */}
+                <DaycareCalendar />
                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-200">
                     <h4 className="font-semibold text-gray-900">데이케어 예약 현황</h4>
@@ -1243,8 +1330,8 @@ transition-colors whitespace-nowrap cursor-pointer"
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(reservation.status)}`}>
                                 {reservation.status === 'confirmed' ? '확정' :
-                                 reservation.status === 'pending' ? '대기' :
-                                 reservation.status === 'completed' ? '완료' : '취소'}
+                                  reservation.status === 'pending' ? '대기' :
+                                  reservation.status === 'completed' ? '완료' : '취소'}
                               </span>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -1260,11 +1347,9 @@ transition-colors whitespace-nowrap cursor-pointer"
                 </div>
               </div>
             )}
-
             {activeTab === 'account' && (
               <div className="space-y-6">
                 <h3 className="text-xl font-bold text-gray-900">계정 관리</h3>
-                
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="bg-white rounded-lg border border-gray-200 p-6">
                     <div className="flex justify-between items-center mb-4">
@@ -1279,7 +1364,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                         {isEditingAccount ? '취소' : '수정'}
                       </button>
                     </div>
-                    
                     {isEditingAccount ? (
                       <div className="space-y-4">
                         <div>
@@ -1349,7 +1433,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                       </div>
                     )}
                   </div>
-                  
                   <div className="bg-white rounded-lg border border-gray-200 p-6">
                     <h4 className="font-semibold text-gray-900 mb-4">
                       <i className="ri-shield-check-line mr-2 text-green-600"></i>보안 설정
@@ -1372,7 +1455,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                           </div>
                         </div>
                       </div>
-                      
                       <div className="bg-yellow-50 rounded-lg p-4">
                         <h5 className="font-medium text-yellow-800 mb-2">
                           <i className="ri-information-line mr-2"></i>비밀번호 찾기 안내
@@ -1385,7 +1467,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                         </a>
                       </div>
                     </div>
-
                     <div className="mt-6 border-t border-gray-100 pt-4">
                       <h5 className="font-medium text-gray-900 mb-3">비밀번호 변경</h5>
                       <div className="space-y-3">
@@ -1416,7 +1497,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                 </div>
               </div>
             )}
-
             {activeTab === 'faq' && (
               <div className="space-y-6">
                 <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -1511,7 +1591,6 @@ transition-colors whitespace-nowrap cursor-pointer"
                     </div>
                   </form>
                 </div>
-
                 <div className="bg-white rounded-lg border border-gray-200">
                   <div className="overflow-x-auto">
                     {faqLoading && faqs.length === 0 ? (

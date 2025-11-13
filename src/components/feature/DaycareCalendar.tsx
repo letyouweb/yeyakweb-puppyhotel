@@ -97,7 +97,11 @@ export default function DaycareCalendar() {
 
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month, day);
-      const dateString = date.toISOString().split('T')[0];
+      // 한국 시간 기준으로 날짜 문자열 생성
+      const yyyy = date.getFullYear();
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const dd = String(date.getDate()).padStart(2, '0');
+      const dateString = `${yyyy}-${mm}-${dd}`;
       
       // 주말 제외 (데이케어는 평일만 운영)
       if (date.getDay() === 0 || date.getDay() === 6) continue;
@@ -159,7 +163,12 @@ export default function DaycareCalendar() {
   const getDateString = (day: number) => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    return new Date(year, month, day).toISOString().split('T')[0];
+    // 한국 시간 기준으로 날짜 문자열 생성 (타임존 문제 방지)
+    const date = new Date(year, month, day);
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   };
 
   const getReservationCount = (day: number) => {

@@ -19,11 +19,22 @@ export default function DaycareCalendar() {
   const [daycareData, setDaycareData] = useState<DaycareData>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
+  // 컴포넌트 mount 시 + 탭 전환 시 데이터 로드
   useEffect(() => {
+    console.log('🧒 DaycareCalendar 마운트 - 데이터 로드 시작');
     loadDaycareData();
-    
-    // 실시간 예약 업데이트 감지
+  }, []); // 빈 배열: 컴포넌트 mount시에만 실행
+
+  // 월 변경 시 데이터 다시 로드
+  useEffect(() => {
+    console.log('📅 월 변경됨 - 데이터 다시 로드');
+    loadDaycareData();
+  }, [currentDate]);
+
+  // 실시간 예약 업데이트 감지
+  useEffect(() => {
     const handleReservationUpdate = () => {
+      console.log('🔄 예약 업데이트 이벤트 감지 - 데이터 새로고침');
       loadDaycareData();
     };
     
@@ -32,7 +43,7 @@ export default function DaycareCalendar() {
     return () => {
       window.removeEventListener('reservationUpdated', handleReservationUpdate);
     };
-  }, [currentDate]);
+  }, []);
 
   const loadDaycareData = () => {
     // 저장된 데이케어 예약 데이터 불러오기

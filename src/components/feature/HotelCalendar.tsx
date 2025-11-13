@@ -21,11 +21,22 @@ export default function HotelCalendar() {
   const [hotelData, setHotelData] = useState<HotelData>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
+  // 컴포넌트 mount 시 + 탭 전환 시 데이터 로드
   useEffect(() => {
+    console.log('🏨 HotelCalendar 마운트 - 데이터 로드 시작');
     loadHotelData();
-    
-    // 실시간 예약 업데이트 감지
+  }, []); // 빈 배열: 컴포넌트 mount시에만 실행
+
+  // 월 변경 시 데이터 다시 로드
+  useEffect(() => {
+    console.log('📅 월 변경됨 - 데이터 다시 로드');
+    loadHotelData();
+  }, [currentDate]);
+
+  // 실시간 예약 업데이트 감지
+  useEffect(() => {
     const handleReservationUpdate = () => {
+      console.log('🔄 예약 업데이트 이벤트 감지 - 데이터 새로고침');
       loadHotelData();
     };
     
@@ -34,7 +45,7 @@ export default function HotelCalendar() {
     return () => {
       window.removeEventListener('reservationUpdated', handleReservationUpdate);
     };
-  }, [currentDate]);
+  }, []);
 
   const loadHotelData = () => {
     // 저장된 호텔 예약 데이터 불러오기

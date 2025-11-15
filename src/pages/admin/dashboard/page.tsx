@@ -438,69 +438,57 @@ export default function AdminDashboard() {
     }
   };
 
-  // When a pending status is clicked, navigate to the appropriate tab based on service
-  const handlePendingClick = (reservation: Reservation) => {
-    // 예약 상세를 해당 서비스 탭으로 이동시키고 로컬 스토리지에 예약을 업데이트
-    const service = reservation.service;
-    // 새 예약 객체를 생성 (localStorage 구조에 맞게)
-    let newRes: any = {};
-    if (service === 'grooming') {
-      newRes = {
-        id: reservation.id,
-        petName: reservation.petName,
-        ownerName: reservation.ownerName,
-        date: reservation.date,
-        time: reservation.time,
-        phone: reservation.phone,
-        style: reservation.style || '기본미용',
-        status: reservation.status,
-        service: 'grooming'
-      };
-    } else if (service === 'hotel') {
-      newRes = {
-        id: reservation.id,
-        petName: reservation.petName,
-        ownerName: reservation.ownerName,
-        checkIn: reservation.checkIn || reservation.date,
-        checkOut: reservation.checkOut || reservation.date,
-        roomType: reservation.roomType || '일반룸',
-        phone: reservation.phone,
-        status: reservation.status,
-        service: 'hotel'
-      };
-    } else if (service === 'daycare') {
-      newRes = {
-        id: reservation.id,
-        petName: reservation.petName,
-        ownerName: reservation.ownerName,
-        date: reservation.date,
-        time: reservation.time,
-        phone: reservation.phone,
-        status: reservation.status,
-        service: 'daycare'
-      };
+  // When a pending status is clicked, change the reservation to confirmed,
+  // update Supabase and local state/storage, then navigate to the service tab
+  const handlePendingClick = async (reservation: Reservation) => {
+    // Only handle pending reservations
+    if (reservation.status !== 'pending') {
+      // Still navigate to the correct tab for non-pending items
+      setActiveTab(reservation.service);
+      return;
     }
-    // localStorage 업데이트: 기존 동일 ID가 있으면 먼저 삭제한 후 추가
     try {
-      // 동일한 예약을 제거하여 중복을 방지합니다.
-      removeReservationData([reservation.id]);
-      updateReservationData(newRes, service as any);
-    } catch (e) {
-      console.error('예약 데이터를 업데이트하는 중 오류 발생:', e);
-    }
-    // 해당 서비스 탭으로 이동
-    switch (service) {
-      case 'grooming':
-        setActiveTab('grooming');
-        break;
-      case 'hotel':
-        setActiveTab('hotel');
-        break;
-      case 'daycare':
-        setActiveTab('daycare');
-        break;
-      default:
-        break;
+      // Update the reservation status in Supabase to 'confirmed'
+      const result = await updateReservationStatus(reservation.id, 'confirmed');
+      if (!result.success) {
+        alert('예약 상태를 업데이트하는 데 실패했습니다.');
+        return;
+      }
+      // Convert returned data to legacy format for local updates
+      const updatedRes = result.data as any;
+      // Remove any existing entries for this ID from localStorage
+      try {
+        removeReservationData([reservation.id]);
+      } catch (e) {
+        console.error('로컬 스토리지에서 예약을 제거하는 중 오류 발생:', e);
+      }
+      // Add the updated reservation back to localStorage under its service
+      try {
+        updateReservationData(updatedRes, updatedRes.service as any);
+      } catch (e) {
+        console.error('로컬 스토리지에 예약을 추가하는 중 오류 발생:', e);
+      }
+      // Update the reservations list in React state
+      setReservations((prev) =>
+        prev.map((r) => (r.id === reservation.id ? { ...updatedRes } : r)),
+      );
+      // Navigate to the corresponding service tab
+      switch (updatedRes.service) {
+        case 'grooming':
+          setActiveTab('grooming');
+          break;
+        case 'hotel':
+          setActiveTab('hotel');
+          break;
+        case 'daycare':
+          setActiveTab('daycare');
+          break;
+        default:
+          break;
+      }
+    } catch (error) {
+      console.error('예약 확정 처리 중 오류 발생:', error);
+      alert('예약 상태 업데이트 중 오류가 발생했습니다.');
     }
   };
 

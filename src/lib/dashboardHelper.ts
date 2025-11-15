@@ -47,10 +47,38 @@ export function convertToSupabaseFormat(reservation: any) {
 export async function loadAllReservations() {
   try {
     const data = await reservationService.getAll();
-    return data.map(convertToLegacyFormat);
+    // Convert to legacy format and filter out soft-deleted (cancelled) reservations.
+    return data
+      .map(convertToLegacyFormat)
+      .filter((r) => r.status !== 'cancelled' && r.status !== 'deleted');
   } catch (error) {
     console.error('예약 데이터 로드 실패:', error);
     return [];
+  }
+}
+
+// Soft delete reservations by updating status to 'cancelled'.
+// Returns an object with success flag and list of updated reservations (legacy format).
+export async function softDeleteReservations(ids: string[]) {
+  if (!ids || ids.length === 0) {
+    return { success: false, error: 'No reservation IDs provided' };
+  }
+  try {
+    // Perform status update on each reservation. Do not send SMS when soft deleting.
+    const results = await Promise.all(
+      ids.map(async (id) => {
+        const res = await updateReservationStatus(id, 'cancelled', false);
+        return res;
+      }),
+    );
+    // Extract updated data where success is true
+    const updated = results
+      .filter((r) => r.success)
+      .map((r) => r.data);
+    return { success: true, data: updated };
+  } catch (error) {
+    console.error('소프트 삭제 실패:', error);
+    return { success: false, error };
   }
 }
 
@@ -95,11 +123,17 @@ export function subscribeToReservations(callback: (data: any) => void) {
     // INSERT, UPDATE, DELETE 이벤트 처리
     if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
       const legacy = convertToLegacyFormat(payload.new as Reservation);
+      // Always notify callback
       callback({ type: payload.eventType, data: legacy });
-      // localStorage 업데이트: 중복 방지를 위해 먼저 해당 ID 삭제 후 추가
       try {
-        removeReservationData([legacy.id]);
-        updateReservationData(legacy, legacy.service as any);
+        // For soft-deleted reservations (status cancelled or deleted), remove from localStorage and skip re-adding.
+        if (legacy.status === 'cancelled' || legacy.status === 'deleted') {
+          removeReservationData([legacy.id]);
+        } else {
+          // Remove any existing entry to avoid duplicates
+          removeReservationData([legacy.id]);
+          updateReservationData(legacy, legacy.service as any);
+        }
       } catch (e) {
         console.warn('localStorage 예약 동기화 실패:', e);
       }

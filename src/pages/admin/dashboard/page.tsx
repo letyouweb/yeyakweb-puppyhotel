@@ -380,15 +380,10 @@ export default function AdminDashboard() {
     try {
       const result = await updateReservationStatus(reservationId, newStatus, true);
       if (result.success) {
-        const updatedReservation = result.data;
-        
         setReservations((prev) =>
-          prev.map((reservation) => (reservation.id === reservationId ? updatedReservation : reservation))
+          prev.map((reservation) => (reservation.id === reservationId ? result.data : reservation))
         );
-        
-        // ✅ confirmed 상태일 때 localStorage에 저장하여 달력에 표시
         if (newStatus === 'confirmed') {
-          updateCalendarData(updatedReservation);
           alert('예약이 확정되었으며, 고객에게 문자가 발송되었습니다.');
         }
       } else {
@@ -398,64 +393,6 @@ export default function AdminDashboard() {
       console.error('상태 변경 실패:', error);
       alert('오류가 발생했습니다.');
     }
-  };
-
-  // 🎯 달력 데이터 업데이트 함수
-  const updateCalendarData = (reservation: Reservation) => {
-    console.log('📅 달력 데이터 업데이트:', reservation);
-    
-    if (reservation.service === 'grooming') {
-      // 미용 예약을 localStorage에 저장
-      const existingData = localStorage.getItem('groomingReservations');
-      const reservations = existingData ? JSON.parse(existingData) : [];
-      
-      // 중복 체크 (같은 ID가 있으면 업데이트, 없으면 추가)
-      const index = reservations.findIndex((r: any) => r.id === reservation.id);
-      if (index >= 0) {
-        reservations[index] = reservation;
-      } else {
-        reservations.push(reservation);
-      }
-      
-      localStorage.setItem('groomingReservations', JSON.stringify(reservations));
-      console.log('✅ 미용 예약 저장 완료:', reservations.length, '개');
-      
-    } else if (reservation.service === 'hotel') {
-      // 호텔 예약을 localStorage에 저장
-      const existingData = localStorage.getItem('hotelReservations');
-      const reservations = existingData ? JSON.parse(existingData) : [];
-      
-      // 중복 체크 (같은 ID가 있으면 업데이트, 없으면 추가)
-      const index = reservations.findIndex((r: any) => r.id === reservation.id);
-      if (index >= 0) {
-        reservations[index] = reservation;
-      } else {
-        reservations.push(reservation);
-      }
-      
-      localStorage.setItem('hotelReservations', JSON.stringify(reservations));
-      console.log('✅ 호텔 예약 저장 완료:', reservations.length, '개');
-      
-    } else if (reservation.service === 'daycare') {
-      // 데이케어 예약을 localStorage에 저장
-      const existingData = localStorage.getItem('daycareReservations');
-      const reservations = existingData ? JSON.parse(existingData) : [];
-      
-      // 중복 체크 (같은 ID가 있으면 업데이트, 없으면 추가)
-      const index = reservations.findIndex((r: any) => r.id === reservation.id);
-      if (index >= 0) {
-        reservations[index] = reservation;
-      } else {
-        reservations.push(reservation);
-      }
-      
-      localStorage.setItem('daycareReservations', JSON.stringify(reservations));
-      console.log('✅ 데이케어 예약 저장 완료:', reservations.length, '개');
-    }
-    
-    // 달력 컴포넌트에 업데이트 이벤트 발생
-    window.dispatchEvent(new Event('reservationUpdated'));
-    console.log('🔄 달력 새로고침 이벤트 발생');
   };
 
   // Toggle selection for an individual reservation
@@ -503,8 +440,6 @@ export default function AdminDashboard() {
 
   // When a pending status is clicked, navigate to the appropriate tab based on service
   const handlePendingClick = (reservation: Reservation) => {
-    console.log('🔵 대기 예약 클릭:', reservation);
-    
     // 예약 상세를 해당 서비스 탭으로 이동시키고 로컬 스토리지에 예약을 업데이트
     const service = reservation.service;
     // 새 예약 객체를 생성 (localStorage 구조에 맞게)
@@ -545,37 +480,27 @@ export default function AdminDashboard() {
         service: 'daycare'
       };
     }
-    
-    // localStorage 업데이트
+    // localStorage 업데이트: 기존 동일 ID가 있으면 먼저 삭제한 후 추가
     try {
-      console.log('💾 localStorage 업데이트 시작:', newRes);
-      // updateReservationData 함수가 중복을 자동으로 처리하므로 removeReservationData는 불필요
+      // 동일한 예약을 제거하여 중복을 방지합니다.
+      removeReservationData([reservation.id]);
       updateReservationData(newRes, service as any);
-      console.log('✅ localStorage 업데이트 완료');
-      
-      // 약간의 지연 후 탭 이동 (localStorage 업데이트가 완료되도록)
-      setTimeout(() => {
-        // 해당 서비스 탭으로 이동
-        switch (service) {
-          case 'grooming':
-            console.log('📍 미용예약현황 탭으로 이동');
-            setActiveTab('grooming');
-            break;
-          case 'hotel':
-            console.log('📍 호텔 탭으로 이동');
-            setActiveTab('hotel');
-            break;
-          case 'daycare':
-            console.log('📍 데이케어 탭으로 이동');
-            setActiveTab('daycare');
-            break;
-          default:
-            break;
-        }
-      }, 100);
     } catch (e) {
-      console.error('❌ 예약 데이터 업데이트 중 오류 발생:', e);
-      alert('예약 데이터를 달력에 표시하는 중 오류가 발생했습니다.');
+      console.error('예약 데이터를 업데이트하는 중 오류 발생:', e);
+    }
+    // 해당 서비스 탭으로 이동
+    switch (service) {
+      case 'grooming':
+        setActiveTab('grooming');
+        break;
+      case 'hotel':
+        setActiveTab('hotel');
+        break;
+      case 'daycare':
+        setActiveTab('daycare');
+        break;
+      default:
+        break;
     }
   };
 
@@ -645,6 +570,33 @@ export default function AdminDashboard() {
       case 'completed': return 'bg-blue-100 text-blue-800';
       case 'cancelled': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Delete a single reservation. This permanently removes the reservation from the database
+  // and updates both the React state and localStorage. If the reservation was selected for
+  // bulk deletion it is also removed from the selection list.
+  const handleDeleteReservation = async (reservationId: string) => {
+    if (!confirm('이 예약을 삭제하시겠습니까?')) {
+      return;
+    }
+    try {
+      // Delete from Supabase
+      await reservationService.remove(reservationId);
+      // Update local React state
+      setReservations((prev) => prev.filter((r) => r.id !== reservationId));
+      // Remove from localStorage for calendar sync
+      try {
+        removeReservationData([reservationId]);
+      } catch (e) {
+        console.warn('localStorage 예약 삭제 중 오류:', e);
+      }
+      // Remove from selected IDs if necessary
+      setSelectedReservations((prev) => prev.filter((id) => id !== reservationId));
+      alert('예약이 삭제되었습니다.');
+    } catch (error) {
+      console.error('예약 삭제 실패:', error);
+      alert('예약을 삭제하지 못했습니다.');
     }
   };
 
@@ -1100,9 +1052,16 @@ export default function AdminDashboard() {
                               )}
                               <button
                                 onClick={() => handleStatusChange(reservation.id, 'cancelled')}
-                                className="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700 transition-colors whitespace-nowrap cursor-pointer"
+                                className="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700 transition-colors whitespace-nowrap cursor-pointer mr-2"
                               >
                                 <i className="ri-close-line mr-1"></i>취소
+                              </button>
+                              {/* Delete button */}
+                              <button
+                                onClick={() => handleDeleteReservation(reservation.id)}
+                                className="bg-red-800 text-white px-3 py-1 rounded text-xs hover:bg-red-900 transition-colors whitespace-nowrap cursor-pointer"
+                              >
+                                <i className="ri-delete-bin-line mr-1"></i>삭제
                               </button>
                             </td>
                             {/* Row selection checkbox */}

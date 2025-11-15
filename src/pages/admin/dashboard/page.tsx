@@ -441,38 +441,24 @@ export default function AdminDashboard() {
   // When a pending status is clicked, change the reservation to confirmed,
   // update Supabase and local state/storage, then navigate to the service tab
   const handlePendingClick = async (reservation: Reservation) => {
-    // Only handle pending reservations
+    // 처리해야 할 상태가 pending인 경우에만 실행
     if (reservation.status !== 'pending') {
-      // Still navigate to the correct tab for non-pending items
       setActiveTab(reservation.service);
       return;
     }
     try {
-      // Update the reservation status in Supabase to 'confirmed'
+      // Supabase에서 예약 상태를 confirmed로 업데이트합니다.
       const result = await updateReservationStatus(reservation.id, 'confirmed');
       if (!result.success) {
         alert('예약 상태를 업데이트하는 데 실패했습니다.');
         return;
       }
-      // Convert returned data to legacy format for local updates
       const updatedRes = result.data as any;
-      // Remove any existing entries for this ID from localStorage
-      try {
-        removeReservationData([reservation.id]);
-      } catch (e) {
-        console.error('로컬 스토리지에서 예약을 제거하는 중 오류 발생:', e);
-      }
-      // Add the updated reservation back to localStorage under its service
-      try {
-        updateReservationData(updatedRes, updatedRes.service as any);
-      } catch (e) {
-        console.error('로컬 스토리지에 예약을 추가하는 중 오류 발생:', e);
-      }
-      // Update the reservations list in React state
+      // 프론트엔드 상태를 갱신합니다. localStorage 업데이트는 실시간 구독(subscription)을 통해 처리됩니다.
       setReservations((prev) =>
         prev.map((r) => (r.id === reservation.id ? { ...updatedRes } : r)),
       );
-      // Navigate to the corresponding service tab
+      // 서비스 탭으로 이동
       switch (updatedRes.service) {
         case 'grooming':
           setActiveTab('grooming');

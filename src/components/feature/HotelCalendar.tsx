@@ -168,10 +168,15 @@ export default function HotelCalendar() {
     return days;
   };
 
+  // 날짜 문자열을 로컬 시간 기준(한국 시간)으로 반환하는 함수
+  // toISOString()은 UTC 기준으로 날짜를 문자열로 반환하여 하루가 밀리는 문제가 발생할 수 있으므로
+  // 연도/월/일을 직접 조합하여 "YYYY-MM-DD" 형식의 문자열을 생성한다.
   const getDateString = (day: number) => {
     const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    return new Date(year, month, day).toISOString().split('T')[0];
+    const month = currentDate.getMonth() + 1;
+    const monthStr = month.toString().padStart(2, '0');
+    const dayStr = day.toString().padStart(2, '0');
+    return `${year}-${monthStr}-${dayStr}`;
   };
 
   const getReservationCount = (day: number) => {

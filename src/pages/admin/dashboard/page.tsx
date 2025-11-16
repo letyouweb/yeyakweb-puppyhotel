@@ -607,7 +607,7 @@ export default function AdminDashboard() {
   };
 
   const tabButtonClass = (tab: TabKey) =>
-    `flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer touch-manipulation ${
+    `flex-shrink-0 py-4 px-4 min-h-[44px] border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer touch-manipulation select-none active:scale-95 active:bg-gray-50 transition-transform ${
       activeTab === tab
         ? 'border-teal-500 text-teal-600'
         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -648,7 +648,7 @@ export default function AdminDashboard() {
         {/* Tab Navigation */}
         <div className="bg-white rounded-lg shadow-sm mb-8">
           <div className="border-b border-gray-200 overflow-x-auto w-full">
-            <nav className="-mb-px flex flex-wrap md:flex-nowrap gap-3 md:gap-6 px-4 sm:px-6 w-full" role="tablist">
+            <nav className="-mb-px flex flex-wrap md:flex-nowrap gap-1 md:gap-4 px-2 sm:px-6 w-full" role="tablist">
               {TAB_CONFIG.map(({ key, label, icon }) => (
                 <button
                   key={key}

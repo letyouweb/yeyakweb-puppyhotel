@@ -59,15 +59,24 @@ async function fetchWithRetry(
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      // TODO: 실제 서비스 배포 시에는 timeout/abort 로직을 다시 정교하게 설계할 것
+      // 개발 중에는 AbortController를 사용하지 않습니다 (디버깅 편의를 위해)
+      let controller: AbortController | undefined;
+      let timeoutId: NodeJS.Timeout | undefined;
+
+      if (!isDev) {
+        controller = new AbortController();
+        timeoutId = setTimeout(() => controller.abort(), timeout);
+      }
 
       const response = await fetch(url, {
         ...fetchOptions,
-        signal: controller.signal,
+        ...(controller && { signal: controller.signal }),
       });
 
-      clearTimeout(timeoutId);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
 
       // ✅ 성공 응답
       if (response.ok) {
@@ -97,6 +106,16 @@ async function fetchWithRetry(
 
       if (error instanceof SMSError) {
         throw error;
+      }
+
+      // AbortError 처리 (사용자가 요청을 취소했거나 타임아웃이 발생한 경우)
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('❌ SMS 요청이 AbortController에 의해 취소되었습니다.', error);
+        throw new SMSError(
+          'ABORTED',
+          undefined,
+          'SMS 요청이 클라이언트에서 취소되었습니다. (타임아웃 또는 사용자 취소)'
+        );
       }
 
       if (error instanceof TypeError && error.message.includes('fetch')) {

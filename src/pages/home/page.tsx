@@ -7,6 +7,7 @@ import ChatbotReservationAPI from '../../components/ChatbotReservationAPI';
 import { reservationService } from '../../lib/supabase';
 import { convertToLegacyFormat } from '../../lib/dashboardHelper';
 import { getShopConfig, type ShopConfig } from '../../config/shop-config';
+import { RESERVATION_FORM_MESSAGES } from '../../constants/messages';
 
 export default function HomePage() {
   const [shopConfig, setShopConfig] = useState<ShopConfig>(getShopConfig());
@@ -84,14 +85,14 @@ export default function HomePage() {
       setHotelForm({ ...HOTEL_FORM_INITIAL });
       setHotelFeedback({
         type: 'success',
-        message: '호텔 예약 신청이 접수되었습니다. 관리자가 확인 후 연락드립니다.'
+        message: RESERVATION_FORM_MESSAGES.success
       });
-      alert('호텔 예약 신청이 접수되었습니다. 관리자가 확인 후 연락드립니다.');
+      alert(RESERVATION_FORM_MESSAGES.success);
     } catch (error) {
       console.error('호텔 예약 실패:', error);
       setHotelFeedback({
         type: 'error',
-        message: '예약 처리 중 문제가 발생했습니다. 다시 시도해주세요.'
+        message: RESERVATION_FORM_MESSAGES.error
       });
     } finally {
       setIsHotelSubmitting(false);
@@ -127,14 +128,14 @@ export default function HomePage() {
       setGroomingForm({ ...GROOMING_FORM_INITIAL });
       setGroomingFeedback({
         type: 'success',
-        message: '미용 예약 신청이 접수되었습니다. 관리자가 확인 후 연락드립니다.'
+        message: RESERVATION_FORM_MESSAGES.success
       });
-      alert('미용 예약 신청이 접수되었습니다. 관리자가 확인 후 연락드립니다.');
+      alert(RESERVATION_FORM_MESSAGES.success);
     } catch (error) {
       console.error('미용 예약 실패:', error);
       setGroomingFeedback({
         type: 'error',
-        message: '예약 처리 중 문제가 발생했습니다. 다시 시도해주세요.'
+        message: RESERVATION_FORM_MESSAGES.error
       });
     } finally {
       setIsGroomingSubmitting(false);
@@ -596,11 +597,11 @@ export default function HomePage() {
               </div>
               <div className="flex mb-4">
                 {[...Array(5)].map((_, i) => (
-                  <i key={i} className="ri-star-fill text-yellow-400"></i>
+                  <i key={`review-1-${i}`} className="ri-star-fill text-yellow-400"></i>
                 ))}
               </div>
               <p className="text-gray-700 leading-relaxed">
-                "출장으로 일주일간 맡겼는데 정말 안심이 되었어요. 매일 사진도 보내주시고 
+                "출장으로 일주일간 맡겼는데 정말 안심이 되었어요. 매일 사진도 보내주시고
                 해피가 스트레스 받지 않고 잘 지내는 모습을 볼 수 있어서 감사했습니다."
               </p>
             </div>
@@ -617,11 +618,11 @@ export default function HomePage() {
               </div>
               <div className="flex mb-4">
                 {[...Array(5)].map((_, i) => (
-                  <i key={i} className="ri-star-fill text-yellow-400"></i>
+                  <i key={`review-2-${i}`} className="ri-star-fill text-yellow-400"></i>
                 ))}
               </div>
               <p className="text-gray-700 leading-relaxed">
-                "미용 서비스가 정말 훌륭해요! 코코가 예뻐져서 돌아왔어요. 
+                "미용 서비스가 정말 훌륭해요! 코코가 예뻐져서 돌아왔어요.
                 직원분들도 친절하시고 시설도 깨끗해서 재방문 의사 100%입니다."
               </p>
             </div>
@@ -638,7 +639,7 @@ export default function HomePage() {
               </div>
               <div className="flex mb-4">
                 {[...Array(5)].map((_, i) => (
-                  <i key={i} className="ri-star-fill text-yellow-400"></i>
+                  <i key={`review-3-${i}`} className="ri-star-fill text-yellow-400"></i>
                 ))}
               </div>
               <p className="text-gray-700 leading-relaxed">

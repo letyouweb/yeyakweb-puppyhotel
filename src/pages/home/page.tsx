@@ -1,16 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ReservationCalendar from '../../components/feature/ReservationCalendar';
 import GroomingCalendar from '../../components/feature/GroomingCalendar';
 import HotelCalendar from '../../components/feature/HotelCalendar';
 import RealtimeReservationSync from '../../components/feature/RealtimeReservationSync';
 import ChatbotReservationAPI from '../../components/ChatbotReservationAPI';
 import { reservationService } from '../../lib/supabase';
+import { getShopConfig, type ShopConfig } from '../../config/shop-config';
 
 export default function HomePage() {
+  const [shopConfig, setShopConfig] = useState<ShopConfig>(getShopConfig());
   const [activeService, setActiveService] = useState('hotel');
   const [showCalendar, setShowCalendar] = useState(false);
   const [calendarType, setCalendarType] = useState<'all' | 'grooming' | 'hotel'>('all');
   const [showAppModal, setShowAppModal] = useState(false);
+  
+  // 샵 정보에 따라 페이지 제목 변경
+  useEffect(() => {
+    document.title = shopConfig.title;
+    
+    // 메타 태그 업데이트
+    const metaDescription = document.querySelector('meta[name="description"]');
+    if (metaDescription) {
+      metaDescription.setAttribute('content', shopConfig.description);
+    }
+  }, [shopConfig]);
+  
   const [hotelForm, setHotelForm] = useState({
     petName: '',
     breed: '',

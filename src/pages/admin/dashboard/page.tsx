@@ -4,11 +4,8 @@ import type { User } from '@supabase/supabase-js';
 import GroomingCalendar from '../../../components/feature/GroomingCalendar';
 import HotelCalendar from '../../../components/feature/HotelCalendar';
 import DaycareCalendar from '../../../components/feature/DaycareCalendar';
-import RealtimeReservationSync, {
-  updateReservationData,
-  removeReservationData,
-} from '../../../components/feature/RealtimeReservationSync';
-import { loadAllReservations, updateReservationStatus, subscribeToReservations } from '../../../lib/dashboardHelper';
+import RealtimeReservationSync, { removeReservationData } from '../../../components/feature/RealtimeReservationSync';
+import { loadAllReservations, subscribeToReservations } from '../../../lib/dashboardHelper';
 import {
   adminProfileService,
   adminService,
@@ -18,6 +15,11 @@ import {
   reservationService,
   type FAQ
 } from '../../../lib/supabase';
+import {
+  changeReservationStatus,
+  confirmReservation as confirmReservationAction,
+  deleteReservation as deleteReservationAction,
+} from '../../../lib/adminReservationActions';
 
 interface Reservation {
   id: string;
@@ -136,6 +138,7 @@ export default function AdminDashboard() {
   const [faqs, setFaqs] = useState<FAQ[]>([]);
   const [faqForm, setFaqForm] = useState<FAQ>(DEFAULT_FAQ_FORM);
   const [faqLoading, setFaqLoading] = useState(false);
+  const [showMobileBanner, setShowMobileBanner] = useState(false);
   const navigate = useNavigate();
   const dayNames = {
     monday: 'Monday',
@@ -245,6 +248,16 @@ export default function AdminDashboard() {
       subscription?.unsubscribe();
     };
   }, [navigate]);
+
+  useEffect(() => {
+    const updateBannerVisibility = () => {
+      if (typeof window === 'undefined') return;
+      setShowMobileBanner(window.innerWidth < 768);
+    };
+    updateBannerVisibility();
+    window.addEventListener('resize', updateBannerVisibility);
+    return () => window.removeEventListener('resize', updateBannerVisibility);
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -397,48 +410,28 @@ export default function AdminDashboard() {
     newStatus: 'confirmed' | 'pending' | 'completed' | 'cancelled'
   ) => {
     try {
-      // Send SMS only when confirming
-      const result = await updateReservationStatus(reservationId, newStatus, newStatus === 'confirmed');
-      if (result.success) {
-        const updatedRes = result.data as any;
-        // Update localStorage immediately so calendar reflects new status
-        try {
-          removeReservationData([reservationId]);
-        } catch (e) {
-          console.warn('localStorage 예약 삭제 중 오류:', e);
-        }
-        // If not cancelled or deleted, add updated reservation back to storage
-        if (updatedRes.status !== 'cancelled' && updatedRes.status !== 'deleted') {
-          try {
-            updateReservationData(updatedRes, updatedRes.service as any);
-          } catch (e) {
-            console.warn('localStorage 업데이트 중 오류:', e);
-          }
-        }
-        // Notify other components via custom event
-        window.dispatchEvent(new CustomEvent('reservationUpdated'));
-        // Update state
-        setReservations((prev) =>
-          prev.map((reservation) => (reservation.id === reservationId ? updatedRes : reservation))
-        );
-        // Provide user feedback based on status
-        if (newStatus === 'confirmed') {
-          alert('예약이 확정되었으며 달력에 반영되었습니다.');
-        } else if (newStatus === 'completed') {
-          alert('예약이 완료되었습니다.');
-        } else if (newStatus === 'cancelled') {
-          alert('예약이 취소되었습니다.');
-        }
-      } else {
-        alert('상태 변경에 실패했습니다.');
+      const result = await changeReservationStatus(reservationId, newStatus);
+      if (!result.success || !result.reservation) {
+        alert('?곹깭 蹂寃쎌뿉 ?ㅽ뙣?덉뒿?덈떎.');
+        return;
+      }
+      const updatedRes = result.reservation as Reservation;
+      setReservations((prev) =>
+        prev.map((reservation) => (reservation.id === reservationId ? updatedRes : reservation))
+      );
+      if (newStatus === 'confirmed') {
+        alert('?덉빟???뺤젙?섏뿀?쇰ŉ ?щ젰??諛섏쁺?섏뿀?듬땲??');
+      } else if (newStatus === 'completed') {
+        alert('?덉빟???꾨즺?섏뿀?듬땲??');
+      } else if (newStatus === 'cancelled') {
+        alert('?덉빟??痍⑥냼?섏뿀?듬땲??');
       }
     } catch (error) {
-      console.error('상태 변경 실패:', error);
-      alert('오류가 발생했습니다.');
+      console.error('?곹깭 蹂寃??ㅽ뙣:', error);
+      alert('?ㅻ쪟媛 諛쒖깮?덉뒿?덈떎.');
     }
   };
 
-  // Toggle selection for an individual reservation
   const toggleSelectReservation = (id: string) => {
     setSelectedReservations((prev) => {
       if (prev.includes(id)) {
@@ -486,65 +479,23 @@ export default function AdminDashboard() {
   // When a pending status is clicked, change the reservation to confirmed,
   // update Supabase and local state/storage, then navigate to the service tab
   const handlePendingClick = async (reservation: Reservation) => {
-    // Only handle pending reservations
     if (reservation.status !== 'pending') {
-      // Still navigate to the correct tab for non-pending items
       setActiveTab(reservation.service);
       return;
     }
     try {
-      console.log('🔄 대기 예약 확정 시작:', reservation.id);
-      // Update the reservation status in Supabase to 'confirmed' and send SMS
-      const result = await updateReservationStatus(reservation.id, 'confirmed', true);
-      if (!result.success) {
-        alert('예약 상태를 업데이트하는 데 실패했습니다.');
+      const result = await confirmReservationAction(reservation.id);
+      if (!result.success || !result.reservation) {
+        alert('?덉빟 ?곹깭瑜??낅뜲?댄듃?섎뒗 ???ㅽ뙣?덉뒿?덈떎.');
         return;
       }
-      console.log('✅ Supabase 업데이트 완료');
-      // Convert returned data to legacy format for local updates
-      const updatedRes = result.data as any;
-      // Remove any existing entries for this ID from localStorage
-      try {
-        removeReservationData([reservation.id]);
-        console.log('🗑️ 기존 localStorage 데이터 삭제 완료');
-      } catch (e) {
-        console.error('로컬 스토리지에서 예약을 제거하는 중 오류 발생:', e);
-      }
-      // Add the updated reservation back to localStorage under its service
-      try {
-        updateReservationData(updatedRes, updatedRes.service as any);
-        console.log('💾 localStorage 업데이트 완료:', updatedRes.service);
-      } catch (e) {
-        console.error('로컬 스토리지에 예약을 추가하는 중 오류 발생:', e);
-      }
-      // Force trigger reservationUpdated event to refresh all calendars
-      window.dispatchEvent(new CustomEvent('reservationUpdated'));
-      console.log('📢 reservationUpdated 이벤트 발생');
-      // Update the reservations list in React state
-      setReservations((prev) =>
-        prev.map((r) => (r.id === reservation.id ? { ...updatedRes } : r)),
-      );
-      // Navigate to the corresponding service tab
-      switch (updatedRes.service) {
-        case 'grooming':
-          setActiveTab('grooming');
-          console.log('🎨 미용 탭으로 이동');
-          break;
-        case 'hotel':
-          setActiveTab('hotel');
-          console.log('🏨 호텔 탭으로 이동');
-          break;
-        case 'daycare':
-          setActiveTab('daycare');
-          console.log('👶 데이케어 탭으로 이동');
-          break;
-        default:
-          break;
-      }
-      alert('예약이 확정되었으며 달력에 반영되었습니다.');
+      const updatedRes = result.reservation as Reservation;
+      setReservations((prev) => prev.map((r) => (r.id === reservation.id ? updatedRes : r)));
+      setActiveTab(updatedRes.service);
+      alert('?덉빟???뺤젙?섏뿀?쇰ŉ ?щ젰??諛섏쁺?섏뿀?듬땲??');
     } catch (error) {
-      console.error('예약 확정 처리 중 오류 발생:', error);
-      alert('예약 상태 업데이트 중 오류가 발생했습니다.');
+      console.error('?덉빟 ?뺤젙 泥섎━ 以??ㅻ쪟 諛쒖깮:', error);
+      alert('?덉빟 ?곹깭 ?낅뜲?댄듃 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎.');
     }
   };
 
@@ -552,29 +503,17 @@ export default function AdminDashboard() {
   // and updates both the React state and localStorage. If the reservation was selected for
   // bulk deletion it is also removed from the selection list.
   const handleDeleteReservation = async (reservationId: string) => {
-    if (!confirm('이 예약을 삭제하시겠습니까?')) {
+    if (!confirm('???덉빟????젣?섏떆寃좎뒿?덇퉴?')) {
       return;
     }
-    try {
-      // Delete from Supabase
-      await reservationService.remove(reservationId);
-      // Update local React state
-      setReservations((prev) => prev.filter((r) => r.id !== reservationId));
-      // Remove from localStorage for calendar sync
-      try {
-        removeReservationData([reservationId]);
-      } catch (e) {
-        console.warn('localStorage 예약 삭제 중 오류:', e);
-      }
-      // Remove from selected IDs if necessary
-      setSelectedReservations((prev) => prev.filter((id) => id !== reservationId));
-      // Dispatch event for immediate calendar update
-      window.dispatchEvent(new CustomEvent('reservationUpdated'));
-      alert('예약이 삭제되었습니다.');
-    } catch (error) {
-      console.error('예약 삭제 실패:', error);
-      alert('예약을 삭제하지 못했습니다.');
+    const result = await deleteReservationAction(reservationId);
+    if (!result.success) {
+      alert('?덉빟????젣?섏? 紐삵뻽?듬땲??');
+      return;
     }
+    setReservations((prev) => prev.filter((r) => r.id !== reservationId));
+    setSelectedReservations((prev) => prev.filter((id) => id !== reservationId));
+    alert('?덉빟????젣?섏뿀?듬땲??');
   };
 
   const getStatusColor = (status: string) => {
@@ -643,6 +582,18 @@ export default function AdminDashboard() {
         </div>
       </header>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {showMobileBanner ? (
+        <div className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+          모바일에서는 간단 관리자 화면이 더 편리합니다.
+          <button
+            type="button"
+            className="ml-2 font-semibold underline"
+            onClick={() => navigate('/admin/mobile')}
+          >
+            모바일 관리자 열기
+          </button>
+        </div>
+      ) : null}
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">관리자 대시보드</h2>
           <p className="text-gray-600">PuppyHotel 운영 관리 시스템</p>

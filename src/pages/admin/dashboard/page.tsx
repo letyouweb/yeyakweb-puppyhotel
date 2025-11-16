@@ -88,8 +88,27 @@ const cloneDefaultCalendarSettings = () => ({
 
 const createDefaultWeeklySchedule = (): WeeklySchedule => JSON.parse(JSON.stringify(DEFAULT_WEEKLY_SCHEDULE));
 
+type TabKey =
+  | 'calendar'
+  | 'weekly-schedule'
+  | 'reservations'
+  | 'grooming'
+  | 'hotel'
+  | 'daycare'
+  | 'account';
+
+const TAB_CONFIG: Array<{ key: TabKey; label: string; icon: string }> = [
+  { key: 'calendar', label: '캘린더 설정', icon: 'ri-calendar-line' },
+  { key: 'weekly-schedule', label: '요일별 미용예약 설정', icon: 'ri-scissors-line' },
+  { key: 'reservations', label: '예약 관리', icon: 'ri-list-check' },
+  { key: 'grooming', label: '미용예약현황', icon: 'ri-scissors-line' },
+  { key: 'hotel', label: '호텔', icon: 'ri-hotel-line' },
+  { key: 'daycare', label: '데이케어', icon: 'ri-home-heart-line' },
+  { key: 'account', label: '계정 관리', icon: 'ri-user-settings-line' }
+];
+
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState('calendar');
+  const [activeTab, setActiveTab] = useState<TabKey>('calendar');
   const [reservations, setReservations] = useState<Reservation[]>([]);
   // Selected reservation IDs for bulk deletion
   const [selectedReservations, setSelectedReservations] = useState<string[]>([]);
@@ -583,6 +602,17 @@ export default function AdminDashboard() {
   const hotelReservations = reservations.filter(r => r.service === 'hotel');
   const daycareReservations = reservations.filter(r => r.service === 'daycare');
 
+  const handleTabChange = (tab: TabKey) => {
+    setActiveTab(tab);
+  };
+
+  const tabButtonClass = (tab: TabKey) =>
+    `flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer touch-manipulation ${
+      activeTab === tab
+        ? 'border-teal-500 text-teal-600'
+        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+    }`;
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col w-full overflow-x-hidden">
       {/* 실시간 로컬스토리지 예약 동기화 컴포넌트 */}
@@ -618,77 +648,20 @@ export default function AdminDashboard() {
         {/* Tab Navigation */}
         <div className="bg-white rounded-lg shadow-sm mb-8">
           <div className="border-b border-gray-200 overflow-x-auto w-full">
-            <nav className="-mb-px flex flex-wrap md:flex-nowrap gap-3 md:gap-6 px-4 sm:px-6 w-full">
-              <button
-                onClick={() => setActiveTab('calendar')}
-                className={`flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
-                  activeTab === 'calendar'
-                    ? 'border-teal-500 text-teal-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <i className="ri-calendar-line mr-2"></i>캘린더 설정
-              </button>
-              <button
-                onClick={() => setActiveTab('weekly-schedule')}
-                className={`flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
-                  activeTab === 'weekly-schedule'
-                    ? 'border-teal-500 text-teal-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <i className="ri-scissors-line mr-2"></i>요일별 미용예약 설정
-              </button>
-              <button
-                onClick={() => setActiveTab('reservations')}
-                className={`flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
-                  activeTab === 'reservations'
-                    ? 'border-teal-500 text-teal-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <i className="ri-list-check mr-2"></i>예약 관리
-              </button>
-              <button
-                onClick={() => setActiveTab('grooming')}
-                className={`flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
-                  activeTab === 'grooming'
-                    ? 'border-teal-500 text-teal-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <i className="ri-scissors-line mr-2"></i>미용예약현황
-              </button>
-              <button
-                onClick={() => setActiveTab('hotel')}
-                className={`flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
-                  activeTab === 'hotel'
-                    ? 'border-teal-500 text-teal-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <i className="ri-hotel-line mr-2"></i>호텔
-              </button>
-              <button
-                onClick={() => setActiveTab('daycare')}
-                className={`flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
-                  activeTab === 'daycare'
-                    ? 'border-teal-500 text-teal-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <i className="ri-home-heart-line mr-2"></i>데이케어
-              </button>
-              <button
-                onClick={() => setActiveTab('account')}
-                className={`flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
-                  activeTab === 'account'
-                    ? 'border-teal-500 text-teal-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <i className="ri-user-settings-line mr-2"></i>계정 관리
-              </button>
+            <nav className="-mb-px flex flex-wrap md:flex-nowrap gap-3 md:gap-6 px-4 sm:px-6 w-full" role="tablist">
+              {TAB_CONFIG.map(({ key, label, icon }) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === key}
+                  onClick={() => handleTabChange(key)}
+                  className={tabButtonClass(key)}
+                >
+                  <i className={`${icon} mr-2`}></i>
+                  {label}
+                </button>
+              ))}
             </nav>
           </div>
           <div className="p-6">

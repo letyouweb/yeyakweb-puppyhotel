@@ -98,17 +98,17 @@ type TabKey =
   | 'account';
 
 const TAB_CONFIG: Array<{ key: TabKey; label: string; icon: string }> = [
-  { key: 'calendar', label: '캘린더 설정', icon: 'ri-calendar-line' },
+  { key: 'reservations', label: '예약관리', icon: 'ri-list-check' },
+  { key: 'grooming', label: '미용예약', icon: 'ri-scissors-line' },
+  { key: 'hotel', label: '호텔예약', icon: 'ri-hotel-line' },
+  { key: 'daycare', label: '데이케어예약', icon: 'ri-home-heart-line' },
   { key: 'weekly-schedule', label: '요일별 미용예약 설정', icon: 'ri-scissors-line' },
-  { key: 'reservations', label: '예약 관리', icon: 'ri-list-check' },
-  { key: 'grooming', label: '미용예약현황', icon: 'ri-scissors-line' },
-  { key: 'hotel', label: '호텔', icon: 'ri-hotel-line' },
-  { key: 'daycare', label: '데이케어', icon: 'ri-home-heart-line' },
+  { key: 'calendar', label: '캘린더 설정', icon: 'ri-calendar-line' },
   { key: 'account', label: '계정 관리', icon: 'ri-user-settings-line' }
 ];
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<TabKey>('calendar');
+  const [activeTab, setActiveTab] = useState<TabKey>('reservations');
   const [reservations, setReservations] = useState<Reservation[]>([]);
   // Selected reservation IDs for bulk deletion
   const [selectedReservations, setSelectedReservations] = useState<string[]>([]);
@@ -623,13 +623,15 @@ export default function AdminDashboard() {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <h1 className="text-2xl font-bold text-gray-900" style={{fontFamily: 'Pacifico, serif'}}>
-                PuppyHotel Admin
+                <a
+                  href="/#hero"
+                  className="flex items-center gap-2 text-gray-900 hover:text-teal-600 transition-colors cursor-pointer"
+                >
+                  PuppyHotel Admin
+                </a>
               </h1>
             </div>
-            <div className="flex items-center space-x-4">
-              <a href="/" className="text-gray-600 hover:text-gray-900 cursor-pointer">
-                <i className="ri-home-line mr-2"></i>메인 사이트
-              </a>
+            <div className="flex items-center">
               <button
                 onClick={handleLogout}
                 className="bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 transition-colors whitespace-nowrap cursor-pointer"

@@ -197,6 +197,7 @@ export default function HomePage() {
 
       {/* Hero Section */}
       <section
+        id="hero"
         className="relative h-screen flex flex-col justify-between bg-cover bg-center"
         style={{
           backgroundImage:

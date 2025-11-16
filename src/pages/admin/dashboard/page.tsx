@@ -584,7 +584,7 @@ export default function AdminDashboard() {
   const daycareReservations = reservations.filter(r => r.service === 'daycare');
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col w-full overflow-x-hidden">
       {/* 실시간 로컬스토리지 예약 동기화 컴포넌트 */}
       <RealtimeReservationSync />
       {/* Header */}
@@ -617,11 +617,11 @@ export default function AdminDashboard() {
         </div>
         {/* Tab Navigation */}
         <div className="bg-white rounded-lg shadow-sm mb-8">
-          <div className="border-b border-gray-200">
-            <nav className="-mb-px flex space-x-8 px-6">
+          <div className="border-b border-gray-200 overflow-x-auto w-full">
+            <nav className="-mb-px flex flex-wrap md:flex-nowrap gap-3 md:gap-6 px-4 sm:px-6 w-full">
               <button
                 onClick={() => setActiveTab('calendar')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
+                className={`flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
                   activeTab === 'calendar'
                     ? 'border-teal-500 text-teal-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -631,7 +631,7 @@ export default function AdminDashboard() {
               </button>
               <button
                 onClick={() => setActiveTab('weekly-schedule')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
+                className={`flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
                   activeTab === 'weekly-schedule'
                     ? 'border-teal-500 text-teal-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -641,7 +641,7 @@ export default function AdminDashboard() {
               </button>
               <button
                 onClick={() => setActiveTab('reservations')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
+                className={`flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
                   activeTab === 'reservations'
                     ? 'border-teal-500 text-teal-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -651,7 +651,7 @@ export default function AdminDashboard() {
               </button>
               <button
                 onClick={() => setActiveTab('grooming')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
+                className={`flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
                   activeTab === 'grooming'
                     ? 'border-teal-500 text-teal-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -661,7 +661,7 @@ export default function AdminDashboard() {
               </button>
               <button
                 onClick={() => setActiveTab('hotel')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
+                className={`flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
                   activeTab === 'hotel'
                     ? 'border-teal-500 text-teal-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -671,7 +671,7 @@ export default function AdminDashboard() {
               </button>
               <button
                 onClick={() => setActiveTab('daycare')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
+                className={`flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
                   activeTab === 'daycare'
                     ? 'border-teal-500 text-teal-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -681,7 +681,7 @@ export default function AdminDashboard() {
               </button>
               <button
                 onClick={() => setActiveTab('account')}
-                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
+                className={`flex-shrink-0 py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap cursor-pointer ${
                   activeTab === 'account'
                     ? 'border-teal-500 text-teal-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'

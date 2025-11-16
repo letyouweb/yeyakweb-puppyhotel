@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import ReservationCalendar from '../../components/feature/ReservationCalendar';
 import GroomingCalendar from '../../components/feature/GroomingCalendar';
 import HotelCalendar from '../../components/feature/HotelCalendar';
-import RealtimeReservationSync from '../../components/feature/RealtimeReservationSync';
+import RealtimeReservationSync, { updateReservationData } from '../../components/feature/RealtimeReservationSync';
 import ChatbotReservationAPI from '../../components/ChatbotReservationAPI';
 import { reservationService } from '../../lib/supabase';
+import { convertToLegacyFormat } from '../../lib/dashboardHelper';
 import { getShopConfig, type ShopConfig } from '../../config/shop-config';
 
 export default function HomePage() {
@@ -25,7 +26,7 @@ export default function HomePage() {
     }
   }, [shopConfig]);
   
-  const [hotelForm, setHotelForm] = useState({
+  const HOTEL_FORM_INITIAL = {
     petName: '',
     breed: '',
     age: '',
@@ -34,8 +35,8 @@ export default function HomePage() {
     checkOut: '',
     notes: '',
     ownerContact: ''
-  });
-  const [groomingForm, setGroomingForm] = useState({
+  };
+  const GROOMING_FORM_INITIAL = {
     petName: '',
     breed: '',
     age: '',
@@ -44,14 +45,23 @@ export default function HomePage() {
     time: '',
     style: '',
     ownerContact: ''
-  });
+  };
+
+  const [hotelForm, setHotelForm] = useState(HOTEL_FORM_INITIAL);
+  const [groomingForm, setGroomingForm] = useState(GROOMING_FORM_INITIAL);
+  const [isHotelSubmitting, setIsHotelSubmitting] = useState(false);
+  const [isGroomingSubmitting, setIsGroomingSubmitting] = useState(false);
+  const [hotelFeedback, setHotelFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [groomingFeedback, setGroomingFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const handleHotelSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isHotelSubmitting) return;
+    setHotelFeedback(null);
+    setIsHotelSubmitting(true);
 
     try {
-      // Supabase에 예약 저장
-      await reservationService.create({
+      const created = await reservationService.create({
         pet_name: hotelForm.petName,
         owner_name: '고객',
         service: 'hotel',
@@ -64,31 +74,38 @@ export default function HomePage() {
         special_notes: hotelForm.notes
       });
 
-      // 폼 초기화
-      setHotelForm({
-        petName: '',
-        breed: '',
-        age: '',
-        weight: '',
-        checkIn: '',
-        checkOut: '',
-        notes: '',
-        ownerContact: ''
-      });
+      try {
+        const legacy = convertToLegacyFormat(created);
+        updateReservationData(legacy, 'hotel');
+      } catch (syncError) {
+        console.warn('로컬 캘린더 동기화 실패:', syncError);
+      }
 
+      setHotelForm({ ...HOTEL_FORM_INITIAL });
+      setHotelFeedback({
+        type: 'success',
+        message: '호텔 예약 신청이 접수되었습니다. 관리자가 확인 후 연락드립니다.'
+      });
       alert('호텔 예약 신청이 접수되었습니다. 관리자가 확인 후 연락드립니다.');
     } catch (error) {
-      console.error('예약 실패:', error);
-      alert('예약 중 오류가 발생했습니다. 다시 시도해주세요.');
+      console.error('호텔 예약 실패:', error);
+      setHotelFeedback({
+        type: 'error',
+        message: '예약 처리 중 문제가 발생했습니다. 다시 시도해주세요.'
+      });
+    } finally {
+      setIsHotelSubmitting(false);
     }
   };
 
   const handleGroomingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isGroomingSubmitting) return;
+    setGroomingFeedback(null);
+    setIsGroomingSubmitting(true);
 
     try {
-      // Supabase에 예약 저장
-      await reservationService.create({
+      const created = await reservationService.create({
         pet_name: groomingForm.petName,
         owner_name: '고객',
         service: 'grooming',
@@ -100,22 +117,27 @@ export default function HomePage() {
         special_notes: ''
       });
 
-      // 폼 초기화
-      setGroomingForm({
-        petName: '',
-        breed: '',
-        age: '',
-        weight: '',
-        date: '',
-        time: '',
-        style: '',
-        ownerContact: ''
-      });
+      try {
+        const legacy = convertToLegacyFormat(created);
+        updateReservationData(legacy, 'grooming');
+      } catch (syncError) {
+        console.warn('로컬 캘린더 동기화 실패:', syncError);
+      }
 
+      setGroomingForm({ ...GROOMING_FORM_INITIAL });
+      setGroomingFeedback({
+        type: 'success',
+        message: '미용 예약 신청이 접수되었습니다. 관리자가 확인 후 연락드립니다.'
+      });
       alert('미용 예약 신청이 접수되었습니다. 관리자가 확인 후 연락드립니다.');
     } catch (error) {
-      console.error('예약 실패:', error);
-      alert('예약 중 오류가 발생했습니다. 다시 시도해주세요.');
+      console.error('미용 예약 실패:', error);
+      setGroomingFeedback({
+        type: 'error',
+        message: '예약 처리 중 문제가 발생했습니다. 다시 시도해주세요.'
+      });
+    } finally {
+      setIsGroomingSubmitting(false);
     }
   };
 

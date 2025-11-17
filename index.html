@@ -28,33 +28,14 @@
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
 
-    <style>
-      /* Customize Readdy floating button to use branded chatbot icon */
-      #vapi-widget-floating-button {
-        width: 64px !important;
-        height: 64px !important;
-        border-radius: 50% !important;
-        background-color: transparent !important;
-        background-image: url('/yeyakweb_chatbot.png');
-        background-position: center;
-        background-repeat: no-repeat;
-        background-size: cover;
-        border: none !important;
-        box-shadow: 0 10px 25px rgba(20, 184, 166, 0.35);
-      }
-
-      #vapi-widget-floating-button svg,
-      #vapi-widget-floating-button img {
-        display: none !important;
-      }
-    </style>
+    
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
 
     <!--
-      Readdy Agent Widget disabled
+     
       원래 이 위치에 챗봇 위젯을 로드하는 스크립트가 있었습니다.
       서비스에서 챗봇을 더 이상 사용하지 않으므로 해당 스크립트를 제거하여
       홈페이지에서 챗봇이 보이지 않도록 합니다.
@@ -261,7 +242,6 @@
         window.PuppyHotelReservationSystem.createTestReservation();
       };
 
-      // Readdy Agent 이벤트 리스너 설정
       document.addEventListener('DOMContentLoaded', function () {
         console.log('PuppyHotel 예약 시스템 초기화 완료');
 
@@ -270,7 +250,6 @@
           // 메시지 이벤트 리스너
           window.addEventListener('message', function (event) {
             try {
-              // Readdy Agent에서 오는 예약 완료 메시지 처리
               if (event.data && event.data.type === 'reservation_completed') {
                 console.log('챗봇 예약 완료 이벤트 수신:', event.data);
                 window.PuppyHotelReservationSystem.saveReservation(event.data.reservation);
@@ -289,14 +268,7 @@
             }
           });
 
-          // 챗봇 위젯 클릭 이벤트 감지
-          const chatbotButton = document.querySelector('#vapi-widget-floating-button');
-          if (chatbotButton) {
-            console.log('챗봇 버튼 감지됨');
-            chatbotButton.addEventListener('click', function () {
-              console.log('챗봇 상담 시작');
-            });
-          }
+          // 메시지 리스너만 유지 (Readdy/Vapi 위젯 관련 코드는 제거됨)
         }, 3000);
       });
 

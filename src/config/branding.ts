@@ -23,8 +23,8 @@ export interface SiteBranding {
 export const SITE_CONFIGS: Record<string, SiteBranding> = {
   // 오니너리 멍 설정
   ordinarymung: {
-    name: '오니너리 멍',
-    nameEn: 'Ordinary Mung',
+    name: 'PuppyHotel',
+    nameEn: 'PuppyHotel',
     description: '평범하지만 특별한 우리 아이를 위한 공간',
     primaryColor: '#FF6B6B', // 따뜻한 코랄 레드
     secondaryColor: '#4ECDC4', // 민트 그린

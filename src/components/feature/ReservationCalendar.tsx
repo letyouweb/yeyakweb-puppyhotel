@@ -216,7 +216,7 @@ export default function ReservationCalendar() {
       <div className="grid grid-cols-7 gap-1">
         {getMonthDays().map((day, index) => {
           if (day === null) {
-            return <div key={index} className="p-3" />;
+            return <div key={`empty-${index}`} className="p-3" />;
           }
           const dateKey = formatDate(day);
           const count = getReservationCount(day);
@@ -225,7 +225,7 @@ export default function ReservationCalendar() {
           const isSelected = selectedDate === dateKey;
           return (
             <div
-              key={day}
+              key={dateKey}
               onClick={() => handleDateClick(day)}
               className={`relative p-3 border rounded-lg cursor-pointer transition-all ${
                 isSelected ? 'bg-blue-50 border-blue-300' : 'border-gray-200 hover:bg-gray-50'
@@ -296,8 +296,8 @@ export default function ReservationCalendar() {
           )}
           {/* 예약 상세 목록 */}
           <div className="space-y-3">
-            {summaryData[selectedDate].reservations.map((res, idx) => (
-              <div key={idx} className="bg-white rounded-lg p-3 border border-blue-200">
+            {summaryData[selectedDate].reservations.map((res) => (
+              <div key={res.id} className="bg-white rounded-lg p-3 border border-blue-200">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1">

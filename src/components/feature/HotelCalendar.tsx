@@ -321,14 +321,14 @@ export default function HotelCalendar() {
       <div className="grid grid-cols-7 gap-1">
         {getDaysInMonth().map((day, index) => {
           if (day === null) {
-            return <div key={index} className="p-3"></div>;
+            return <div key={`empty-${index}`} className="p-3"></div>;
           }
           const dateString = getDateString(day);
           const reservationCount = getReservationCount(day);
           const isToday = dateString === today;
           const isSelected = selectedDate === dateString;
           return (
-            <div key={day} onClick={() => handleDateClick(day)} className={`relative p-3 border border-gray-200 rounded-lg cursor-pointer transition-all hover:shadow-md ${isToday ? 'ring-2 ring-blue-500' : ''} ${isSelected ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'}`}>
+            <div key={dateString} onClick={() => handleDateClick(day)} className={`relative p-3 border border-gray-200 rounded-lg cursor-pointer transition-all hover:shadow-md ${isToday ? 'ring-2 ring-blue-500' : ''} ${isSelected ? 'bg-blue-50 border-blue-300' : 'hover:bg-gray-50'}`}>
               <div className="text-center">
                 <div className={`text-lg font-semibold mb-1 ${index % 7 === 0 ? 'text-red-600' : index % 7 === 6 ? 'text-blue-600' : 'text-gray-900'}`}>{day}</div>
                 <div className="space-y-1">
@@ -348,8 +348,8 @@ export default function HotelCalendar() {
             {new Date(selectedDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })} 호텔 예약 현황
           </h4>
           <div className="space-y-3">
-            {hotelData[selectedDate].map((reservation, index) => (
-              <div key={index} className="bg-white rounded-lg p-3 border border-blue-200">
+            {hotelData[selectedDate].map((reservation) => (
+              <div key={reservation.id} className="bg-white rounded-lg p-3 border border-blue-200">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1">

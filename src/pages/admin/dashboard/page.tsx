@@ -412,7 +412,7 @@ export default function AdminDashboard() {
     try {
       const result = await changeReservationStatus(reservationId, newStatus);
       if (!result.success || !result.reservation) {
-        alert('?곹깭 蹂寃쎌뿉 ?ㅽ뙣?덉뒿?덈떎.');
+        alert('예약 상태 변경에 실패했습니다.');
         return;
       }
       const updatedRes = result.reservation as Reservation;
@@ -420,15 +420,15 @@ export default function AdminDashboard() {
         prev.map((reservation) => (reservation.id === reservationId ? updatedRes : reservation))
       );
       if (newStatus === 'confirmed') {
-        alert('?덉빟???뺤젙?섏뿀?쇰ŉ ?щ젰??諛섏쁺?섏뿀?듬땲??');
+        alert('예약이 확정되었으며 고객에게 SMS가 발송되었습니다.');
       } else if (newStatus === 'completed') {
-        alert('?덉빟???꾨즺?섏뿀?듬땲??');
+        alert('예약이 완료 처리되었습니다.');
       } else if (newStatus === 'cancelled') {
-        alert('?덉빟??痍⑥냼?섏뿀?듬땲??');
+        alert('예약이 취소되었습니다.');
       }
     } catch (error) {
-      console.error('?곹깭 蹂寃??ㅽ뙣:', error);
-      alert('?ㅻ쪟媛 諛쒖깮?덉뒿?덈떎.');
+      console.error('상태 변경 실패:', error);
+      alert('처리 중 오류가 발생했습니다. 다시 시도해 주세요.');
     }
   };
 
@@ -486,16 +486,16 @@ export default function AdminDashboard() {
     try {
       const result = await confirmReservationAction(reservation.id);
       if (!result.success || !result.reservation) {
-        alert('?덉빟 ?곹깭瑜??낅뜲?댄듃?섎뒗 ???ㅽ뙣?덉뒿?덈떎.');
+        alert('예약 상태를 업데이트하는데 실패했습니다.');
         return;
       }
       const updatedRes = result.reservation as Reservation;
       setReservations((prev) => prev.map((r) => (r.id === reservation.id ? updatedRes : r)));
       setActiveTab(updatedRes.service);
-      alert('?덉빟???뺤젙?섏뿀?쇰ŉ ?щ젰??諛섏쁺?섏뿀?듬땲??');
+      alert('예약이 확정되었으며 고객에게 SMS가 발송되었습니다.');
     } catch (error) {
-      console.error('?덉빟 ?뺤젙 泥섎━ 以??ㅻ쪟 諛쒖깮:', error);
-      alert('?덉빟 ?곹깭 ?낅뜲?댄듃 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎.');
+      console.error('예약 확정 처리 중 오류 발생:', error);
+      alert('예약 상태 업데이트 중 오류가 발생했습니다.');
     }
   };
 
@@ -503,17 +503,17 @@ export default function AdminDashboard() {
   // and updates both the React state and localStorage. If the reservation was selected for
   // bulk deletion it is also removed from the selection list.
   const handleDeleteReservation = async (reservationId: string) => {
-    if (!confirm('???덉빟????젣?섏떆寃좎뒿?덇퉴?')) {
+    if (!confirm('이 예약을 삭제하시겠습니까?')) {
       return;
     }
     const result = await deleteReservationAction(reservationId);
     if (!result.success) {
-      alert('?덉빟????젣?섏? 紐삵뻽?듬땲??');
+      alert('예약을 삭제하지 못했습니다.');
       return;
     }
     setReservations((prev) => prev.filter((r) => r.id !== reservationId));
     setSelectedReservations((prev) => prev.filter((id) => id !== reservationId));
-    alert('?덉빟????젣?섏뿀?듬땲??');
+    alert('예약이 삭제되었습니다.');
   };
 
   const getStatusColor = (status: string) => {

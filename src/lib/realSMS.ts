@@ -192,6 +192,21 @@ export const realSMSService = {
       reservation.reservation_time || ''
     }.`;
 
+    // 개발 환경에서는 실제 SMS를 발송하지 않고 조기 리턴
+    if (isDev) {
+      const params = {
+        수신자: reservation.phone,
+        메시지: message.substring(0, 50) + '...',
+        서비스: reservation.service,
+      };
+      console.log('🔧 [개발 환경] SMS 발송 스킵', params);
+      return {
+        success: true,
+        code: 'DEV_SKIP',
+        message: '개발 환경: 실제 SMS 미발송',
+      };
+    }
+
     console.log('========================================');
     console.log('📱 SMS 발송 시작');
     console.log('========================================');

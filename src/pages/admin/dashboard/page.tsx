@@ -553,7 +553,8 @@ export default function AdminDashboard() {
     }`;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col w-full overflow-x-hidden">
+    <div className="admin-dashboard-desktop-root">
+      <div className="min-h-screen bg-gray-50 flex flex-col w-full overflow-x-hidden">
       {/* 실시간 로컬스토리지 예약 동기화 컴포넌트 */}
       <RealtimeReservationSync />
       {/* Header */}
@@ -1022,7 +1023,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 {/* 미용 예약 달력 */}
-                <GroomingCalendar />
+                <GroomingCalendar reservations={reservations} />
                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
                     <h4 className="font-semibold text-gray-900">미용 예약 상세 현황</h4>
@@ -1127,7 +1128,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 {/* 호텔 예약 달력 */}
-                <HotelCalendar />
+                <HotelCalendar reservations={reservations} />
                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-200">
                     <h4 className="font-semibold text-gray-900">호텔 예약 현황</h4>
@@ -1232,7 +1233,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 {/* 데이케어 예약 달력 */}
-                <DaycareCalendar />
+                <DaycareCalendar reservations={reservations} />
                 <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-200">
                     <h4 className="font-semibold text-gray-900">데이케어 예약 현황</h4>
@@ -1441,6 +1442,7 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }

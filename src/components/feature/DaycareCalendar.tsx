@@ -1,149 +1,53 @@
 import { useState, useEffect } from 'react';
-
-interface DaycareReservation {
-  id: string;
-  petName: string;
-  ownerName: string;
-  time: string;
-  phone: string;
-  status: 'confirmed' | 'pending' | 'completed' | 'cancelled';
-}
+import type { Reservation, CalendarProps } from '../../types/reservation';
 
 interface DaycareData {
-  [date: string]: DaycareReservation[];
+  [date: string]: Reservation[];
 }
 
 /**
- * 데이케어 예약 달력 컴포넌트
- * - localStorage에 저장된 daycareReservations 데이터를 불러와 날짜별로 그룹화하여 달력에 표시합니다.
- * - 평일만 운영되며, 선택한 날짜의 예약 목록을 보여주고 수동으로 추가/삭제할 수 있습니다.
+ * 데이케어 예약 달력 컴포넌트 (Supabase 연동)
+ * - props로 전달받은 reservations 데이터를 사용하여 달력에 표시합니다.
+ * - localStorage 의존성을 완전히 제거하고 Supabase 데이터만 사용합니다.
+ * - 평일만 운영됩니다.
  */
-export default function DaycareCalendar() {
+export default function DaycareCalendar({ reservations }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [daycareData, setDaycareData] = useState<DaycareData>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  // 예약 추가 폼 표시 여부
-  const [showAddForm, setShowAddForm] = useState(false);
-  // 새 데이케어 예약 입력 값 상태
-  const [newReservation, setNewReservation] = useState({
-    petName: '',
-    ownerName: '',
-    time: '',
-    phone: ''
-  });
 
   useEffect(() => {
     loadDaycareData();
-    // 실시간 예약 업데이트 감지
-    const handleReservationUpdate = () => {
-      loadDaycareData();
-    };
-    window.addEventListener('reservationUpdated', handleReservationUpdate);
-    return () => {
-      window.removeEventListener('reservationUpdated', handleReservationUpdate);
-    };
-  }, [currentDate]);
+  }, [reservations, currentDate]);
 
   const loadDaycareData = () => {
     try {
-      // 데이케어 예약은 allReservations에서 service가 'daycare'인 것과 daycareReservations 모두를 포함
-      const allRaw = localStorage.getItem('allReservations');
-      const daycareRaw = localStorage.getItem('daycareReservations');
-      let reservations: any[] = [];
-      if (allRaw) {
-        try {
-          const all = JSON.parse(allRaw);
-          const fromAll = all.filter((r: any) => r && r.service === 'daycare');
-          reservations = reservations.concat(fromAll);
-        } catch (e) {
-          console.warn('allReservations 파싱 실패:', e);
-        }
-      }
-      if (daycareRaw) {
-        try {
-          const fromDaycare = JSON.parse(daycareRaw);
-          reservations = reservations.concat(fromDaycare);
-        } catch (e) {
-          console.warn('daycareReservations 파싱 실패:', e);
-        }
-      }
-      if (!reservations.length) {
-        generateMockDaycareData();
-        return;
-      }
-      const seenIds = new Set<string>();
-      const deduped: any[] = [];
-      for (const res of reservations) {
-        if (!res || !res.id) continue;
-        if (seenIds.has(res.id)) continue;
-        seenIds.add(res.id);
-        deduped.push(res);
-      }
+      // reservations에서 데이케어 서비스만 필터링 (cancelled 제외)
+      const daycareReservations = reservations.filter(
+        (r) => r.service === 'daycare' && r.status !== 'cancelled'
+      );
+
+      // 날짜별로 그룹화
       const groupedData: DaycareData = {};
-      deduped.forEach((reservation: any) => {
+      daycareReservations.forEach((reservation) => {
         const date = reservation.date;
         if (!date) return;
         if (!groupedData[date]) {
           groupedData[date] = [];
         }
-        groupedData[date].push({
-          id: reservation.id,
-          petName: reservation.petName,
-          ownerName: reservation.ownerName || '고객',
-          time: reservation.time,
-          phone: reservation.phone,
-          status: reservation.status,
-        });
+        groupedData[date].push(reservation);
       });
-      Object.keys(groupedData).forEach(date => {
+
+      // 각 날짜별로 시간순 정렬
+      Object.keys(groupedData).forEach((date) => {
         groupedData[date].sort((a, b) => a.time.localeCompare(b.time));
       });
+
       setDaycareData(groupedData);
     } catch (error) {
       console.warn('데이케어 예약 데이터 로드 실패:', error);
-      generateMockDaycareData();
+      setDaycareData({});
     }
-  };
-
-  // 모의 데이케어 데이터 생성
-  const generateMockDaycareData = () => {
-    const data: DaycareData = {};
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const timeSlots = ['08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
-    const petNames = ['초코', '바둑이', '뽀삐', '코코', '몽이', '루루', '보리', '콩이', '마루', '하늘'];
-    const ownerNames = ['김민수', '이영희', '박철수', '정수진', '최동훈', '한지민', '송민호', '윤서연', '장미영', '오준석'];
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(year, month, day);
-      const dateString = date.toISOString().split('T')[0];
-      // 주말 제외 (데이케어는 평일만 운영)
-      if (date.getDay() === 0 || date.getDay() === 6) continue;
-      const maxReservations = 6;
-      const numReservations = Math.floor(Math.random() * maxReservations);
-      if (numReservations > 0) {
-        const dayReservations: DaycareReservation[] = [];
-        const usedTimes = new Set<string>();
-        for (let i = 0; i < numReservations; i++) {
-          let time;
-          do {
-            time = timeSlots[Math.floor(Math.random() * timeSlots.length)];
-          } while (usedTimes.has(time));
-          usedTimes.add(time);
-          dayReservations.push({
-            id: `daycare-${dateString}-${i}`,
-            petName: petNames[Math.floor(Math.random() * petNames.length)],
-            ownerName: ownerNames[Math.floor(Math.random() * ownerNames.length)],
-            time: time,
-            phone: `010-${Math.floor(Math.random() * 9000) + 1000}-${Math.floor(Math.random() * 9000) + 1000}`,
-            status: ['confirmed', 'pending', 'completed'][Math.floor(Math.random() * 3)] as any
-          });
-        }
-        dayReservations.sort((a, b) => a.time.localeCompare(b.time));
-        data[dateString] = dayReservations;
-      }
-    }
-    setDaycareData(data);
   };
 
   const getDaysInMonth = () => {
@@ -164,8 +68,6 @@ export default function DaycareCalendar() {
   };
 
   // 날짜 문자열을 로컬 시간 기준(한국 시간)으로 반환하는 함수
-  // toISOString()은 UTC 기준으로 날짜를 문자열로 반환하여 하루가 밀리는 문제가 발생할 수 있으므로
-  // 연도/월/일을 직접 조합하여 "YYYY-MM-DD" 형식의 문자열을 생성한다.
   const getDateString = (day: number) => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth() + 1;
@@ -211,66 +113,31 @@ export default function DaycareCalendar() {
     }
     setCurrentDate(newDate);
     setSelectedDate(null);
-    setShowAddForm(false);
-    setNewReservation({ petName: '', ownerName: '', time: '', phone: '' });
   };
 
   const handleDateClick = (day: number) => {
     if (isWeekend(day)) return; // 주말은 클릭 불가
     const dateString = getDateString(day);
     setSelectedDate(selectedDate === dateString ? null : dateString);
-    setShowAddForm(false);
-    setNewReservation({ petName: '', ownerName: '', time: '', phone: '' });
   };
 
   const getReservationStatusColor = (status: string) => {
     switch (status) {
-      case 'confirmed': return 'bg-green-100 text-green-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'completed': return 'bg-blue-100 text-blue-800';
-      case 'cancelled': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'confirmed':
+        return 'bg-green-100 text-green-800';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'completed':
+        return 'bg-blue-100 text-blue-800';
+      case 'cancelled':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
-  // 새 예약 폼 입력 핸들러
-  const handleNewChange = (field: keyof typeof newReservation, value: string) => {
-    setNewReservation((prev) => ({ ...prev, [field]: value }));
-  };
-
-  // 데이케어 예약 추가
-  const addReservation = () => {
-    if (!selectedDate) return;
-    const reservations = JSON.parse(localStorage.getItem('daycareReservations') || '[]');
-    const newRes: any = {
-      id: `daycare-${selectedDate}-${Date.now()}`,
-      petName: newReservation.petName || '반려동물',
-      ownerName: newReservation.ownerName || '고객',
-      date: selectedDate,
-      time: newReservation.time || '미정',
-      phone: newReservation.phone || '',
-      status: 'confirmed',
-      service: 'daycare'
-    };
-    reservations.push(newRes);
-    localStorage.setItem('daycareReservations', JSON.stringify(reservations));
-    setNewReservation({ petName: '', ownerName: '', time: '', phone: '' });
-    setShowAddForm(false);
-    loadDaycareData();
-    window.dispatchEvent(new CustomEvent('reservationUpdated'));
-  };
-
-  // 데이케어 예약 삭제
-  const deleteReservation = (id: string) => {
-    const reservations = JSON.parse(localStorage.getItem('daycareReservations') || '[]');
-    const newData = reservations.filter((r: any) => r.id !== id);
-    localStorage.setItem('daycareReservations', JSON.stringify(newData));
-    loadDaycareData();
-    window.dispatchEvent(new CustomEvent('reservationUpdated'));
-  };
-
-  const monthNames = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
-  const dayNames = ['일','월','화','수','목','금','토'];
+  const monthNames = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+  const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
   const today = new Date().toISOString().split('T')[0];
 
   return (
@@ -282,13 +149,19 @@ export default function DaycareCalendar() {
             데이케어 예약 달력
           </h3>
           <div className="flex items-center space-x-2">
-            <button onClick={() => navigateMonth('prev')} className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors cursor-pointer">
+            <button
+              onClick={() => navigateMonth('prev')}
+              className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors cursor-pointer"
+            >
               <i className="ri-arrow-left-line text-gray-600"></i>
             </button>
             <h4 className="text-xl font-semibold text-gray-800 min-w-[120px] text-center">
               {currentDate.getFullYear()}년 {monthNames[currentDate.getMonth()]}
             </h4>
-            <button onClick={() => navigateMonth('next')} className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors cursor-pointer">
+            <button
+              onClick={() => navigateMonth('next')}
+              className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors cursor-pointer"
+            >
               <i className="ri-arrow-right-line text-gray-600"></i>
             </button>
           </div>
@@ -320,7 +193,14 @@ export default function DaycareCalendar() {
       {/* 달력 헤더 */}
       <div className="grid grid-cols-7 gap-1 mb-2">
         {dayNames.map((day, index) => (
-          <div key={day} className={`p-3 text-center font-semibold text-sm ${index === 0 ? 'text-red-600' : index === 6 ? 'text-blue-600' : 'text-gray-700'}`}>{day}</div>
+          <div
+            key={day}
+            className={`p-3 text-center font-semibold text-sm ${
+              index === 0 ? 'text-red-600' : index === 6 ? 'text-blue-600' : 'text-gray-700'
+            }`}
+          >
+            {day}
+          </div>
         ))}
       </div>
       {/* 달력 본체 */}
@@ -335,15 +215,43 @@ export default function DaycareCalendar() {
           const isSelected = selectedDate === dateString;
           const isWeekendDay = isWeekend(day);
           return (
-            <div key={dateString} onClick={() => handleDateClick(day)} className={`relative p-3 border border-gray-200 rounded-lg transition-all ${isWeekendDay ? 'bg-gray-100 cursor-not-allowed' : 'cursor-pointer hover:shadow-md'} ${isToday ? 'ring-2 ring-orange-500' : ''} ${isSelected ? 'bg-orange-50 border-orange-300' : !isWeekendDay ? 'hover:bg-gray-50' : ''}`}>
+            <div
+              key={dateString}
+              onClick={() => handleDateClick(day)}
+              className={`relative p-3 border border-gray-200 rounded-lg transition-all ${
+                isWeekendDay ? 'bg-gray-100 cursor-not-allowed' : 'cursor-pointer hover:shadow-md'
+              } ${isToday ? 'ring-2 ring-orange-500' : ''} ${
+                isSelected ? 'bg-orange-50 border-orange-300' : !isWeekendDay ? 'hover:bg-gray-50' : ''
+              }`}
+            >
               <div className="text-center">
-                <div className={`text-lg font-semibold mb-1 ${index % 7 === 0 ? 'text-red-600' : index % 7 === 6 ? 'text-blue-600' : isWeekendDay ? 'text-gray-400' : 'text-gray-900'}`}>{day}</div>
+                <div
+                  className={`text-lg font-semibold mb-1 ${
+                    index % 7 === 0
+                      ? 'text-red-600'
+                      : index % 7 === 6
+                      ? 'text-blue-600'
+                      : isWeekendDay
+                      ? 'text-gray-400'
+                      : 'text-gray-900'
+                  }`}
+                >
+                  {day}
+                </div>
                 <div className="space-y-1">
-                  <div className={`text-xs px-2 py-1 rounded-full ${getStatusColor(reservationCount, isWeekendDay)}`}>{getStatusText(reservationCount, isWeekendDay)}</div>
-                  {reservationCount > 0 && !isWeekendDay && <div className="text-xs text-gray-600">{reservationCount}건 예약</div>}
+                  <div className={`text-xs px-2 py-1 rounded-full ${getStatusColor(reservationCount, isWeekendDay)}`}>
+                    {getStatusText(reservationCount, isWeekendDay)}
+                  </div>
+                  {reservationCount > 0 && !isWeekendDay && (
+                    <div className="text-xs text-gray-600">{reservationCount}건 예약</div>
+                  )}
                 </div>
               </div>
-              {isToday && <div className="absolute top-1 right-1"><div className="w-2 h-2 bg-orange-500 rounded-full"></div></div>}
+              {isToday && (
+                <div className="absolute top-1 right-1">
+                  <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -352,7 +260,13 @@ export default function DaycareCalendar() {
       {selectedDate && daycareData[selectedDate] && (
         <div className="mt-6 p-4 bg-orange-50 rounded-lg border border-orange-200">
           <h4 className="font-semibold text-orange-900 mb-3">
-            {new Date(selectedDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })} 데이케어 예약 현황
+            {new Date(selectedDate + 'T00:00:00').toLocaleDateString('ko-KR', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+              weekday: 'long',
+            })}{' '}
+            데이케어 예약 현황
           </h4>
           <div className="space-y-3">
             {daycareData[selectedDate].map((reservation) => (
@@ -361,40 +275,35 @@ export default function DaycareCalendar() {
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1">
                       <span className="font-semibold text-gray-900">{reservation.time}</span>
-                      <span className={`text-xs px-2 py-1 rounded-full ${getReservationStatusColor(reservation.status)}`}>{reservation.status === 'confirmed' ? '확정' : reservation.status === 'pending' ? '대기' : reservation.status === 'completed' ? '완료' : '취소'}</span>
+                      <span className={`text-xs px-2 py-1 rounded-full ${getReservationStatusColor(reservation.status)}`}>
+                        {reservation.status === 'confirmed'
+                          ? '확정'
+                          : reservation.status === 'pending'
+                          ? '대기'
+                          : reservation.status === 'completed'
+                          ? '완료'
+                          : '취소'}
+                      </span>
                     </div>
                     <div className="text-sm text-gray-700">
                       <div className="flex items-center space-x-4">
-                        <span><strong>반려동물:</strong> {reservation.petName}</span>
-                        <span><strong>보호자:</strong> {reservation.ownerName}</span>
+                        <span>
+                          <strong>반려동물:</strong> {reservation.petName}
+                        </span>
+                        <span>
+                          <strong>보호자:</strong> {reservation.ownerName}
+                        </span>
                       </div>
                       <div className="mt-1">
-                        <span><strong>연락처:</strong> {reservation.phone}</span>
+                        <span>
+                          <strong>연락처:</strong> {reservation.phone}
+                        </span>
                       </div>
                     </div>
                   </div>
-                  {/* 삭제 버튼 */}
-                  <button onClick={() => deleteReservation(reservation.id)} className="text-red-500 text-xs ml-2">삭제</button>
                 </div>
               </div>
             ))}
-          </div>
-          {/* 예약 추가/폼 */}
-          <div className="mt-4">
-            {showAddForm ? (
-              <div className="space-y-2">
-                <input type="text" placeholder="반려동물 이름" value={newReservation.petName} onChange={(e) => handleNewChange('petName', e.target.value)} className="w-full border p-2 rounded" />
-                <input type="text" placeholder="보호자 이름" value={newReservation.ownerName} onChange={(e) => handleNewChange('ownerName', e.target.value)} className="w-full border p-2 rounded" />
-                <input type="time" value={newReservation.time} onChange={(e) => handleNewChange('time', e.target.value)} className="w-full border p-2 rounded" />
-                <input type="text" placeholder="연락처" value={newReservation.phone} onChange={(e) => handleNewChange('phone', e.target.value)} className="w-full border p-2 rounded" />
-                <div className="flex space-x-2">
-                  <button onClick={addReservation} className="bg-orange-500 text-white px-3 py-1 rounded">추가</button>
-                  <button onClick={() => { setShowAddForm(false); setNewReservation({ petName: '', ownerName: '', time: '', phone: '' }); }} className="border px-3 py-1 rounded">취소</button>
-                </div>
-              </div>
-            ) : (
-              <button onClick={() => setShowAddForm(true)} className="bg-orange-500 text-white px-3 py-1 rounded">예약 추가</button>
-            )}
           </div>
         </div>
       )}
@@ -402,25 +311,14 @@ export default function DaycareCalendar() {
       {selectedDate && !daycareData[selectedDate] && !isWeekend(parseInt(selectedDate.split('-')[2])) && (
         <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
           <h4 className="font-semibold text-gray-700 mb-2">
-            {new Date(selectedDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+            {new Date(selectedDate + 'T00:00:00').toLocaleDateString('ko-KR', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+              weekday: 'long',
+            })}
           </h4>
-          <p className="text-gray-600 mb-4">이 날은 데이케어 예약이 없습니다.</p>
-          <div>
-            {showAddForm ? (
-              <div className="space-y-2">
-                <input type="text" placeholder="반려동물 이름" value={newReservation.petName} onChange={(e) => handleNewChange('petName', e.target.value)} className="w-full border p-2 rounded" />
-                <input type="text" placeholder="보호자 이름" value={newReservation.ownerName} onChange={(e) => handleNewChange('ownerName', e.target.value)} className="w-full border p-2 rounded" />
-                <input type="time" value={newReservation.time} onChange={(e) => handleNewChange('time', e.target.value)} className="w-full border p-2 rounded" />
-                <input type="text" placeholder="연락처" value={newReservation.phone} onChange={(e) => handleNewChange('phone', e.target.value)} className="w-full border p-2 rounded" />
-                <div className="flex space-x-2">
-                  <button onClick={addReservation} className="bg-orange-500 text-white px-3 py-1 rounded">추가</button>
-                  <button onClick={() => { setShowAddForm(false); setNewReservation({ petName: '', ownerName: '', time: '', phone: '' }); }} className="border px-3 py-1 rounded">취소</button>
-                </div>
-              </div>
-            ) : (
-              <button onClick={() => setShowAddForm(true)} className="bg-orange-500 text-white px-3 py-1 rounded">예약 추가</button>
-            )}
-          </div>
+          <p className="text-gray-600">이 날은 데이케어 예약이 없습니다.</p>
         </div>
       )}
     </div>

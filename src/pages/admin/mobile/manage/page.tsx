@@ -1,10 +1,27 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { adminService } from '../../../lib/supabase';
+import { adminService, reservationService } from '../../../../lib/supabase';
 import {
-  useTodayReservationsForMobile,
-  type MobileReservation,
-} from '../../../hooks/useTodayReservationsForMobile';
+  changeReservationStatus,
+  deleteReservation as deleteReservationAction,
+  type ReservationStatus,
+} from '../../../../lib/adminReservationActions';
+
+interface MobileReservation {
+  id: string;
+  petName: string;
+  ownerName: string;
+  service: 'hotel' | 'grooming' | 'daycare';
+  date: string;
+  time: string;
+  status: 'confirmed' | 'pending' | 'completed' | 'cancelled' | 'deleted';
+  phone: string;
+  roomType?: string;
+  checkIn?: string;
+  checkOut?: string;
+  style?: string;
+  specialNotes?: string;
+}
 
 const SERVICE_LABELS: Record<MobileReservation['service'], string> = {
   grooming: '미용',
@@ -13,9 +30,9 @@ const SERVICE_LABELS: Record<MobileReservation['service'], string> = {
 };
 
 const SERVICE_SECTIONS: Array<{ key: MobileReservation['service']; title: string }> = [
-  { key: 'grooming', title: '1. 오늘 미용 예약' },
-  { key: 'hotel', title: '2. 오늘 호텔 예약' },
-  { key: 'daycare', title: '3. 오늘 데이케어 예약' },
+  { key: 'grooming', title: '미용 대기 예약' },
+  { key: 'hotel', title: '호텔 대기 예약' },
+  { key: 'daycare', title: '데이케어 대기 예약' },
 ];
 
 const STATUS_LABELS: Record<MobileReservation['status'], string> = {
@@ -82,8 +99,13 @@ const getServiceDetail = (reservation: MobileReservation) => {
   return SERVICE_LABELS[reservation.service];
 };
 
-// 조회 전용 예약 카드 렌더링 함수 (버튼 없음)
-const renderReservationCard = (reservation: MobileReservation) => {
+// 관리용 예약 카드 렌더링 함수 (버튼 있음)
+const renderReservationCard = (
+  reservation: MobileReservation,
+  onStatusChange: (id: string, status: ReservationStatus) => void,
+  onDelete: (id: string) => void,
+  processingId: string | null
+) => {
   const timeDisplay = reservation.time ? reservation.time.substring(0, 5) : '시간 미정';
 
   const ServiceIcon =
@@ -118,10 +140,12 @@ const renderReservationCard = (reservation: MobileReservation) => {
           </p>
         </div>
 
-        {/* 우측: 상태 뱃지 */}
-        <span className={`text-xs font-semibold rounded-full border px-3 py-1 ${statusStyle}`}>
-          {statusLabel}
-        </span>
+        {/* 우측: 상태 뱃지 (pending이 아닌 경우만) */}
+        {reservation.status !== 'pending' && (
+          <span className={`text-xs font-semibold rounded-full border px-3 py-1 ${statusStyle}`}>
+            {statusLabel}
+          </span>
+        )}
       </div>
 
       {/* 일정 정보 */}
@@ -138,27 +162,108 @@ const renderReservationCard = (reservation: MobileReservation) => {
           📝 {reservation.specialNotes}
         </p>
       ) : null}
+
+      {/* 버튼 영역 */}
+      <div className="mt-2 flex justify-end gap-2">
+        {reservation.status === 'pending' ? (
+          <button
+            type="button"
+            onClick={() => onStatusChange(reservation.id, 'confirmed')}
+            disabled={processingId === reservation.id}
+            className="inline-flex items-center gap-1 rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-600 disabled:opacity-50 shadow-md"
+          >
+            <i className="ri-check-line text-base" />
+            {processingId === reservation.id ? '처리 중...' : '대기 → 확정'}
+          </button>
+        ) : null}
+        {(reservation.status === 'pending' || reservation.status === 'confirmed') && (
+          <button
+            type="button"
+            onClick={() => onStatusChange(reservation.id, 'cancelled')}
+            disabled={processingId === reservation.id}
+            className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 disabled:opacity-50 hover:bg-amber-100"
+          >
+            <i className="ri-close-line text-sm" />
+            {processingId === reservation.id ? '처리 중...' : '취소'}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => onDelete(reservation.id)}
+          disabled={processingId === reservation.id}
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50 hover:bg-slate-50"
+        >
+          <i className="ri-delete-bin-line text-sm" />
+          {processingId === reservation.id ? '처리 중...' : '삭제'}
+        </button>
+      </div>
     </article>
   );
 };
 
-export default function AdminMobileDashboard() {
+export default function AdminMobileManagePage() {
   const navigate = useNavigate();
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [reservations, setReservations] = useState<MobileReservation[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const {
-    todayGrooming,
-    todayHotel,
-    todayDaycare,
-    refresh,
-    isLoading,
-    isRefreshing,
-    error: dataError,
-    todayKey,
-  } = useTodayReservationsForMobile(isAuthorized);
+  // 오늘 날짜 구하기
+  const todayKey = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
 
   const todayDisplay = formatReservationDate(todayKey);
+
+  // 예약 데이터 불러오기
+  const loadReservations = useCallback(async () => {
+    if (!isAuthorized) return;
+    
+    try {
+      setIsLoading(true);
+      // 오늘 이후의 pending 예약만 가져오기
+      const data = await reservationService.list();
+      
+      const today = new Date(todayKey);
+      const filtered = (data || [])
+        .filter((r: any) => {
+          // pending 상태만
+          if (r.status !== 'pending') return false;
+          
+          // 오늘 이후 날짜만
+          const resDate = new Date(r.date);
+          return resDate >= today;
+        })
+        .map((r: any) => ({
+          id: r.id,
+          petName: r.pet_name || r.petName || '',
+          ownerName: r.owner_name || r.ownerName || '',
+          service: r.service,
+          date: r.date,
+          time: r.time || '',
+          status: r.status,
+          phone: r.phone || '',
+          roomType: r.room_type || r.roomType,
+          checkIn: r.check_in || r.checkIn,
+          checkOut: r.check_out || r.checkOut,
+          style: r.style,
+          specialNotes: r.special_notes || r.specialNotes,
+        } as MobileReservation));
+
+      setReservations(filtered);
+    } catch (error) {
+      console.error('Failed to load reservations:', error);
+      setErrorMessage('예약 데이터를 불러오는데 실패했습니다.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isAuthorized, todayKey]);
 
   useEffect(() => {
     let mounted = true;
@@ -174,7 +279,7 @@ export default function AdminMobileDashboard() {
         localStorage.setItem('adminAuth', 'true');
         setIsAuthorized(true);
       } catch (error) {
-        console.error('Failed to initialize mobile dashboard:', error);
+        console.error('Failed to initialize mobile manage page:', error);
         if (mounted) {
           setErrorMessage('관리자 인증에 실패했습니다. 다시 로그인해주세요.');
         }
@@ -186,46 +291,51 @@ export default function AdminMobileDashboard() {
     };
   }, [navigate]);
 
-  // confirmed와 completed 상태만 필터링
-  const filteredGrooming = useMemo(
-    () => todayGrooming.filter(r => r.status === 'confirmed' || r.status === 'completed'),
-    [todayGrooming]
+  useEffect(() => {
+    if (isAuthorized) {
+      loadReservations();
+    }
+  }, [isAuthorized, loadReservations]);
+
+  // 서비스별 필터링
+  const groomingReservations = useMemo(
+    () => reservations.filter(r => r.service === 'grooming'),
+    [reservations]
   );
   
-  const filteredHotel = useMemo(
-    () => todayHotel.filter(r => r.status === 'confirmed' || r.status === 'completed'),
-    [todayHotel]
+  const hotelReservations = useMemo(
+    () => reservations.filter(r => r.service === 'hotel'),
+    [reservations]
   );
   
-  const filteredDaycare = useMemo(
-    () => todayDaycare.filter(r => r.status === 'confirmed' || r.status === 'completed'),
-    [todayDaycare]
+  const daycareReservations = useMemo(
+    () => reservations.filter(r => r.service === 'daycare'),
+    [reservations]
   );
 
   const stats = useMemo<Record<MobileReservation['service'], number> & { total: number }>(() => {
     return {
-      grooming: filteredGrooming.length,
-      hotel: filteredHotel.length,
-      daycare: filteredDaycare.length,
-      total: filteredGrooming.length + filteredHotel.length + filteredDaycare.length,
+      grooming: groomingReservations.length,
+      hotel: hotelReservations.length,
+      daycare: daycareReservations.length,
+      total: reservations.length,
     };
-  }, [filteredDaycare.length, filteredGrooming.length, filteredHotel.length]);
+  }, [daycareReservations.length, groomingReservations.length, hotelReservations.length, reservations.length]);
 
   const sections = useMemo(
     () => [
-      { ...SERVICE_SECTIONS[0], reservations: filteredGrooming },
-      { ...SERVICE_SECTIONS[1], reservations: filteredHotel },
-      { ...SERVICE_SECTIONS[2], reservations: filteredDaycare },
+      { ...SERVICE_SECTIONS[0], reservations: groomingReservations },
+      { ...SERVICE_SECTIONS[1], reservations: hotelReservations },
+      { ...SERVICE_SECTIONS[2], reservations: daycareReservations },
     ],
-    [filteredDaycare, filteredGrooming, filteredHotel],
+    [daycareReservations, groomingReservations, hotelReservations],
   );
 
-  const combinedError = errorMessage || dataError;
-
-  const handleRefresh = () => {
-    if (!isRefreshing) {
-      refresh();
-    }
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    await loadReservations();
+    setIsRefreshing(false);
   };
 
   const handleLogout = async () => {
@@ -239,6 +349,32 @@ export default function AdminMobileDashboard() {
     }
   };
 
+  const handleStatusChange = async (reservationId: string, nextStatus: ReservationStatus) => {
+    setProcessingId(reservationId);
+    setErrorMessage(null);
+    const result = await changeReservationStatus(reservationId, nextStatus);
+    if (!result.success) {
+      setErrorMessage('상태를 업데이트하지 못했습니다. 다시 시도해주세요.');
+    } else {
+      await loadReservations();
+    }
+    setProcessingId(null);
+  };
+
+  const handleDeleteReservation = async (reservationId: string) => {
+    const confirmed = typeof window === 'undefined' ? true : window.confirm('이 예약을 삭제할까요?');
+    if (!confirmed) return;
+    setProcessingId(reservationId);
+    setErrorMessage(null);
+    const result = await deleteReservationAction(reservationId);
+    if (!result.success) {
+      setErrorMessage('예약을 삭제하지 못했습니다. 잠시 후 다시 시도해주세요.');
+    } else {
+      await loadReservations();
+    }
+    setProcessingId(null);
+  };
+
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-4">
       <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
@@ -246,7 +382,7 @@ export default function AdminMobileDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-slate-500">PuppyHotel</p>
-              <h1 className="text-2xl font-semibold text-slate-900">오늘 스케줄</h1>
+              <h1 className="text-2xl font-semibold text-slate-900">예약 관리</h1>
             </div>
             <button
               type="button"
@@ -258,8 +394,8 @@ export default function AdminMobileDashboard() {
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-slate-500">오늘</p>
-              <p className="text-lg font-semibold text-slate-900">{todayDisplay}</p>
+              <p className="text-sm text-slate-500">대기 예약 관리</p>
+              <p className="text-lg font-semibold text-slate-900">{todayDisplay} 이후</p>
             </div>
             <button
               type="button"
@@ -271,26 +407,26 @@ export default function AdminMobileDashboard() {
           </div>
         </header>
 
-        {/* 예약 관리 화면 열기 버튼 */}
+        {/* 오늘 스케줄만 보기 버튼 */}
         <button
           type="button"
-          onClick={() => navigate('/admin/mobile/manage')}
-          className="w-full rounded-xl bg-teal-600 px-6 py-4 text-base font-semibold text-white shadow-md hover:bg-teal-700 transition-colors"
+          onClick={() => navigate('/admin/mobile')}
+          className="w-full rounded-xl bg-blue-600 px-6 py-4 text-base font-semibold text-white shadow-md hover:bg-blue-700 transition-colors"
         >
-          <i className="ri-list-settings-line mr-2"></i>
-          예약 관리 화면 열기
+          <i className="ri-calendar-check-line mr-2"></i>
+          오늘 스케줄만 보기
         </button>
 
-        {combinedError ? (
+        {errorMessage ? (
           <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {combinedError}
+            {errorMessage}
           </div>
         ) : null}
 
         <section className="rounded-3xl border border-slate-100 bg-white px-5 py-4 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-slate-500">오늘 확정된 예약</p>
+              <p className="text-sm text-slate-500">대기 중인 예약</p>
               <p className="text-3xl font-semibold text-slate-900">{stats.total}</p>
             </div>
             <button
@@ -319,7 +455,7 @@ export default function AdminMobileDashboard() {
               <section key={section.key} className="flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold text-slate-900">{section.title}</h2>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
                     {section.reservations.length}건
                   </span>
                 </div>
@@ -332,13 +468,13 @@ export default function AdminMobileDashboard() {
 
                 {isEmpty ? (
                   <div className="rounded-3xl border border-dashed border-slate-200 bg-white px-5 py-8 text-center text-slate-500">
-                    오늘은 {SERVICE_LABELS[section.key]} 확정 예약이 없습니다.
+                    {SERVICE_LABELS[section.key]} 대기 예약이 없습니다.
                   </div>
                 ) : null}
 
                 {!isLoading &&
                   section.reservations.map((reservation) =>
-                    renderReservationCard(reservation)
+                    renderReservationCard(reservation, handleStatusChange, handleDeleteReservation, processingId)
                   )}
               </section>
             );

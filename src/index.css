@@ -1,3 +1,17 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* 관리자 데스크톱 대시보드 - 모바일에서 축소 표시 */
+@media (max-width: 768px) {
+  .admin-dashboard-desktop-root {
+    /* 원본 폭을 1280px 기준으로 보고 스케일 0.6 적용 */
+    width: 1280px;
+    transform: scale(0.6);
+    transform-origin: top left;
+  }
+  /* 축소된 만큼 가로가 줄어들지만, 혹시 잘릴 경우를 대비해 스크롤 허용 */
+  body {
+    overflow-x: auto;
+  }
+}

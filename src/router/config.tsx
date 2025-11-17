@@ -1,4 +1,3 @@
-
 import type { RouteObject } from 'react-router-dom';
 import { lazy } from 'react';
 
@@ -7,6 +6,7 @@ const AdminLogin = lazy(() => import('../pages/admin/page'));
 const AdminSignup = lazy(() => import('../pages/admin/signup'));
 const AdminDashboard = lazy(() => import('../pages/admin/dashboard/page'));
 const AdminMobileDashboard = lazy(() => import('../pages/admin/mobile/page'));
+const AdminMobileManage = lazy(() => import('../pages/admin/mobile/manage/page'));
 const NotFound = lazy(() => import('../pages/NotFound'));
 
 const routes: RouteObject[] = [
@@ -29,6 +29,10 @@ const routes: RouteObject[] = [
   {
     path: '/admin/mobile',
     element: <AdminMobileDashboard />,
+  },
+  {
+    path: '/admin/mobile/manage',
+    element: <AdminMobileManage />,
   },
   {
     path: '*',

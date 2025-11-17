@@ -15,3 +15,23 @@
     overflow-x: auto;
   }
 }
+
+/* 모바일에서만 숨기기 */
+@media (max-width: 768px) {
+  .mobile-hide {
+    display: none !important;
+  }
+}
+
+/* 모바일에서만 보이게 (버튼/배너용) */
+@media (min-width: 769px) {
+  .mobile-only {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .mobile-only {
+    display: inline-flex;
+  }
+}

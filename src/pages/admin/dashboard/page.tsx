@@ -571,7 +571,13 @@ export default function AdminDashboard() {
                 </a>
               </h1>
             </div>
-            <div className="flex items-center">
+            <div className="flex items-center gap-2">
+              <button
+                className="mobile-only px-3 py-1 text-xs rounded-full border border-slate-300 bg-white/80 text-slate-700 hover:bg-slate-50 transition-colors"
+                onClick={() => navigate("/admin/mobile")}
+              >
+                모바일 간편 화면 열기
+              </button>
               <button
                 onClick={handleLogout}
                 className="bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 transition-colors whitespace-nowrap cursor-pointer"
@@ -986,40 +992,43 @@ export default function AdminDashboard() {
                     <span className="text-sm text-gray-600">실시간 업데이트</span>
                   </div>
                 </div>
-                <div className="grid md:grid-cols-4 gap-6">
-                  <div className="bg-pink-50 rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">오늘 미용</h4>
-                      <span className="text-2xl font-bold text-pink-600">
-                        {groomingReservations.filter(r => r.date === new Date().toISOString().split('T')[0]).length}
-                      </span>
+                {/* 모바일에서 숨길 통계 카드 */}
+                <div className="mobile-hide">
+                  <div className="grid md:grid-cols-4 gap-6">
+                    <div className="bg-pink-50 rounded-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-semibold text-gray-900">오늘 미용</h4>
+                        <span className="text-2xl font-bold text-pink-600">
+                          {groomingReservations.filter(r => r.date === new Date().toISOString().split('T')[0]).length}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">진행 중인 미용</p>
                     </div>
-                    <p className="text-sm text-gray-600">진행 중인 미용</p>
-                  </div>
-                  <div className="bg-indigo-50 rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">대기 중</h4>
-                      <span className="text-2xl font-bold text-indigo-600">
-                        {groomingReservations.filter(r => r.status === 'pending').length}
-                      </span>
+                    <div className="bg-indigo-50 rounded-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-semibold text-gray-900">대기 중</h4>
+                        <span className="text-2xl font-bold text-indigo-600">
+                          {groomingReservations.filter(r => r.status === 'pending').length}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">예약 대기</p>
                     </div>
-                    <p className="text-sm text-gray-600">예약 대기</p>
-                  </div>
-                  <div className="bg-green-50 rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">완료</h4>
-                      <span className="text-2xl font-bold text-green-600">
-                        {groomingReservations.filter(r => r.status === 'completed').length}
-                      </span>
+                    <div className="bg-green-50 rounded-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-semibold text-gray-900">완료</h4>
+                        <span className="text-2xl font-bold text-green-600">
+                          {groomingReservations.filter(r => r.status === 'completed').length}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">오늘 완료</p>
                     </div>
-                    <p className="text-sm text-gray-600">오늘 완료</p>
-                  </div>
-                  <div className="bg-orange-50 rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">총 예약</h4>
-                      <span className="text-2xl font-bold text-orange-600">{groomingReservations.length}</span>
+                    <div className="bg-orange-50 rounded-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-semibold text-gray-900">총 예약</h4>
+                        <span className="text-2xl font-bold text-orange-600">{groomingReservations.length}</span>
+                      </div>
+                      <p className="text-sm text-gray-600">이번 주 전체</p>
                     </div>
-                    <p className="text-sm text-gray-600">이번 주 전체</p>
                   </div>
                 </div>
                 {/* 미용 예약 달력 */}
@@ -1091,40 +1100,43 @@ export default function AdminDashboard() {
                     <span className="text-sm text-gray-600">실시간 업데이트</span>
                   </div>
                 </div>
-                <div className="grid md:grid-cols-4 gap-6">
-                  <div className="bg-blue-50 rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">오늘 체크인</h4>
-                      <span className="text-2xl font-bold text-blue-600">
-                        {hotelReservations.filter(r => r.checkIn === new Date().toISOString().split('T')[0]).length}
-                      </span>
+                {/* 모바일에서 숨길 통계 카드 */}
+                <div className="mobile-hide">
+                  <div className="grid md:grid-cols-4 gap-6">
+                    <div className="bg-blue-50 rounded-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-semibold text-gray-900">오늘 체크인</h4>
+                        <span className="text-2xl font-bold text-blue-600">
+                          {hotelReservations.filter(r => r.checkIn === new Date().toISOString().split('T')[0]).length}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">신규 입실</p>
                     </div>
-                    <p className="text-sm text-gray-600">신규 입실</p>
-                  </div>
-                  <div className="bg-purple-50 rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">현재 투숙</h4>
-                      <span className="text-2xl font-bold text-purple-600">
-                        {hotelReservations.filter(r => r.status === 'confirmed').length}
-                      </span>
+                    <div className="bg-purple-50 rounded-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-semibold text-gray-900">현재 투숙</h4>
+                        <span className="text-2xl font-bold text-purple-600">
+                          {hotelReservations.filter(r => r.status === 'confirmed').length}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">투숙 중</p>
                     </div>
-                    <p className="text-sm text-gray-600">투숙 중</p>
-                  </div>
-                  <div className="bg-green-50 rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">오늘 체크아웃</h4>
-                      <span className="text-2xl font-bold text-green-600">
-                        {hotelReservations.filter(r => r.checkOut === new Date().toISOString().split('T')[0]).length}
-                      </span>
+                    <div className="bg-green-50 rounded-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-semibold text-gray-900">오늘 체크아웃</h4>
+                        <span className="text-2xl font-bold text-green-600">
+                          {hotelReservations.filter(r => r.checkOut === new Date().toISOString().split('T')[0]).length}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">퇴실 예정</p>
                     </div>
-                    <p className="text-sm text-gray-600">퇴실 예정</p>
-                  </div>
-                  <div className="bg-orange-50 rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">총 예약</h4>
-                      <span className="text-2xl font-bold text-orange-600">{hotelReservations.length}</span>
+                    <div className="bg-orange-50 rounded-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-semibold text-gray-900">총 예약</h4>
+                        <span className="text-2xl font-bold text-orange-600">{hotelReservations.length}</span>
+                      </div>
+                      <p className="text-sm text-gray-600">이번 주 전체</p>
                     </div>
-                    <p className="text-sm text-gray-600">이번 주 전체</p>
                   </div>
                 </div>
                 {/* 호텔 예약 달력 */}
@@ -1196,40 +1208,43 @@ export default function AdminDashboard() {
                     <span className="text-sm text-gray-600">실시간 업데이트</span>
                   </div>
                 </div>
-                <div className="grid md:grid-cols-4 gap-6">
-                  <div className="bg-orange-50 rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">오늘 등원</h4>
-                      <span className="text-2xl font-bold text-orange-600">
-                        {daycareReservations.filter(r => r.date === new Date().toISOString().split('T')[0]).length}
-                      </span>
+                {/* 모바일에서 숨길 통계 카드 */}
+                <div className="mobile-hide">
+                  <div className="grid md:grid-cols-4 gap-6">
+                    <div className="bg-orange-50 rounded-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-semibold text-gray-900">오늘 등원</h4>
+                        <span className="text-2xl font-bold text-orange-600">
+                          {daycareReservations.filter(r => r.date === new Date().toISOString().split('T')[0]).length}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">오늘 데이케어</p>
                     </div>
-                    <p className="text-sm text-gray-600">오늘 데이케어</p>
-                  </div>
-                  <div className="bg-green-50 rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">현재 돌봄</h4>
-                      <span className="text-2xl font-bold text-green-600">
-                        {daycareReservations.filter(r => r.status === 'confirmed').length}
-                      </span>
+                    <div className="bg-green-50 rounded-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-semibold text-gray-900">현재 돌봄</h4>
+                        <span className="text-2xl font-bold text-green-600">
+                          {daycareReservations.filter(r => r.status === 'confirmed').length}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">돌봄 중</p>
                     </div>
-                    <p className="text-sm text-gray-600">돌봄 중</p>
-                  </div>
-                  <div className="bg-blue-50 rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">완료</h4>
-                      <span className="text-2xl font-bold text-blue-600">
-                        {daycareReservations.filter(r => r.status === 'completed').length}
-                      </span>
+                    <div className="bg-blue-50 rounded-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-semibold text-gray-900">완료</h4>
+                        <span className="text-2xl font-bold text-blue-600">
+                          {daycareReservations.filter(r => r.status === 'completed').length}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">오늘 완료</p>
                     </div>
-                    <p className="text-sm text-gray-600">오늘 완료</p>
-                  </div>
-                  <div className="bg-purple-50 rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-semibold text-gray-900">총 예약</h4>
-                      <span className="text-2xl font-bold text-purple-600">{daycareReservations.length}</span>
+                    <div className="bg-purple-50 rounded-lg p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-semibold text-gray-900">총 예약</h4>
+                        <span className="text-2xl font-bold text-purple-600">{daycareReservations.length}</span>
+                      </div>
+                      <p className="text-sm text-gray-600">이번 주 전체</p>
                     </div>
-                    <p className="text-sm text-gray-600">이번 주 전체</p>
                   </div>
                 </div>
                 {/* 데이케어 예약 달력 */}

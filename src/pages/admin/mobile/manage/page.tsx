@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { adminService, reservationService } from '../../../../lib/supabase';
+import { adminService } from '../../../../lib/supabase';
+import { loadAllReservations } from '../../../../lib/dashboardHelper';
 import {
   changeReservationStatus,
   deleteReservation as deleteReservationAction,
@@ -227,8 +228,9 @@ export default function AdminMobileManagePage() {
     
     try {
       setIsLoading(true);
+      setErrorMessage(null); // 에러 메시지 초기화
       // 오늘 이후의 pending 예약만 가져오기
-      const data = await reservationService.list();
+      const data = await loadAllReservations();
       
       const today = new Date(todayKey);
       const filtered = (data || [])
@@ -242,24 +244,25 @@ export default function AdminMobileManagePage() {
         })
         .map((r: any) => ({
           id: r.id,
-          petName: r.pet_name || r.petName || '',
-          ownerName: r.owner_name || r.ownerName || '',
+          petName: r.petName || '',
+          ownerName: r.ownerName || '',
           service: r.service,
           date: r.date,
           time: r.time || '',
           status: r.status,
           phone: r.phone || '',
-          roomType: r.room_type || r.roomType,
-          checkIn: r.check_in || r.checkIn,
-          checkOut: r.check_out || r.checkOut,
+          roomType: r.roomType,
+          checkIn: r.checkIn,
+          checkOut: r.checkOut,
           style: r.style,
-          specialNotes: r.special_notes || r.specialNotes,
+          specialNotes: r.specialNotes,
         } as MobileReservation));
 
       setReservations(filtered);
+      console.log(`[ADMIN-MOBILE] 예약 데이터 로딩 성공: ${filtered.length}건`);
     } catch (error) {
-      console.error('Failed to load reservations:', error);
-      setErrorMessage('예약 데이터를 불러오는데 실패했습니다.');
+      console.error('[ADMIN-MOBILE] 예약 데이터 로딩 실패:', error);
+      setErrorMessage('예약 데이터를 불러오는데 실패했습니다. 다시 시도해주세요.');
     } finally {
       setIsLoading(false);
     }
